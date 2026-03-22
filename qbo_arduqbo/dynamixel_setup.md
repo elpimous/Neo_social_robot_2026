@@ -41,8 +41,8 @@ Permet de détecter les servos connectés (adapter le port et la vitesse à 5760
 
 ```bash
 # Vérifier les ports disponibles :
-ls /dev/ttyUSB*
-ls /dev/ttyAMA*
+  ls /dev/ttyUSB*
+  ls /dev/ttyAMA*
 
 # Installer la dépendance :
 sudo apt install python3-serial
@@ -79,7 +79,8 @@ ros2 run qbo_arduqbo qbo_dynamixel   --ros-args --params-file src/qbo_arduqbo/co
 ### 🎮 Commande de mouvement (publisher)
 
 ```bash
-ros2 topic pub -1 /cmd_joints sensor_msgs/JointState   "{name: ['head_pan_joint'], position: [2.0], velocity: [2.0]}"
+ros2 topic pub -1 /cmd_joints sensor_msgs/JointState   "{name: ['head_pan_joint'], position: [0.0], velocity: [2.0]}"
+ros2 topic pub -1 /cmd_joints sensor_msgs/JointState   "{name: ['head_tilt_joint'], position: [0.2], velocity: [2.0]}"
 ```
 
 ---
@@ -100,6 +101,21 @@ ros2 service call /head_tilt_joint/torque_enable qbo_msgs/srv/TorqueEnable   "{t
 ros2 topic echo /dynamixel_state
 ros2 topic echo /joint_states
 ros2 topic echo /diagnostics
+```
+
+# Activer le torque automatique off
+```bash
+ros2 param set /qbo_dynamixel auto_torque_off true
+```
+
+# Désactiver le torque automatique off
+```bash
+ros2 param set /qbo_dynamixel auto_torque_off false
+```
+
+# Modifier le timeout (en secondes)
+```bash
+ros2 param set /qbo_dynamixel auto_torque_off_timeout 5.0
 ```
 
 ---

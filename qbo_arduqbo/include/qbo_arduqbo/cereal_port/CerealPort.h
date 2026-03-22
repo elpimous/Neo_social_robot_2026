@@ -58,13 +58,12 @@ namespace cereal {
     void readBetweenThread(char start, char end);
 
     std::thread stream_thread_;
+    bool stream_paused_;
+    bool stream_stopped_;
     std::atomic<bool> stream_thread_running_;
     std::function<void(char *, int)> readCallback;
     std::function<void(std::string *)> readLineCallback;
     std::function<void(std::string *)> readBetweenCallback;
-
-    bool stream_paused_;
-    bool stream_stopped_;
   };
 
 }

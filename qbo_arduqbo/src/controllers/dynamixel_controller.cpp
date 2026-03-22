@@ -234,6 +234,10 @@ DynamixelController::DynamixelController(const std::shared_ptr<rclcpp::Node> & n
     last_cmd_time_ = steady_clock_.now();
     inactivity_timer_ = node_->create_wall_timer(std::chrono::milliseconds(500), std::bind(&DynamixelController::checkInactivity, this));
 
+    // Callback pour paramètres dynamiques
+    controller_param_callback_handle_ = node_->add_on_set_parameters_callback(
+        std::bind(&DynamixelController::onParameterChange, this, std::placeholders::_1));
+
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(node_);
 
     std::vector<std::string> keys;
@@ -346,7 +350,7 @@ DynamixelController::DynamixelController(const std::shared_ptr<rclcpp::Node> & n
                 stat.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "High temperature");
             } else if (volt < volt_min || volt > volt_max) {
                 stat.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Voltage out of range");
-            } else if (std::abs(error) > error_thresh) {
+            } else if (std::abs(error) > error_thresh && servo->isTorqueEnabled()) {
                 stat.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "High position error");
             } else if (power_watts > 10.0f) {
                 stat.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "High power consumption");
@@ -463,6 +467,33 @@ void DynamixelController::publishJointStates()
     }
 
     joint_state_pub_->publish(msg);
+}
+
+rcl_interfaces::msg::SetParametersResult DynamixelController::onParameterChange(
+    const std::vector<rclcpp::Parameter> & parameters)
+{
+    auto result = rcl_interfaces::msg::SetParametersResult();
+    result.successful = true;
+
+    for (const auto &param : parameters)
+    {
+        const auto &key = param.get_name();
+
+        if (key == "auto_torque_off") {
+            auto_torque_off_ = param.as_bool();
+            RCLCPP_INFO(node_->get_logger(),
+                "🔄 Parameter updated: auto_torque_off = %s",
+                auto_torque_off_ ? "true" : "false");
+        }
+        else if (key == "auto_torque_off_timeout") {
+            timeout_sec_ = param.as_double();
+            RCLCPP_INFO(node_->get_logger(),
+                "🔄 Parameter updated: auto_torque_off_timeout = %.2f seconds",
+                timeout_sec_);
+        }
+    }
+
+    return result;
 }
 
 void DynamixelController::checkInactivity()

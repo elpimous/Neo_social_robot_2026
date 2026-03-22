@@ -88,6 +88,8 @@ private:
     void publishJointStates();
     void jointCmdCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
     void checkInactivity();  // 🆕 gestion de l'inactivité
+    rcl_interfaces::msg::SetParametersResult onParameterChange(
+        const std::vector<rclcpp::Parameter> & parameters);
 
     std::shared_ptr<rclcpp::Node> node_;
     std::string usb_port_;
@@ -101,6 +103,7 @@ private:
     rclcpp::TimerBase::SharedPtr joint_state_timer_;
     rclcpp::TimerBase::SharedPtr inactivity_timer_;
     rclcpp::Clock steady_clock_{RCL_SYSTEM_TIME};  // horloge système stable
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr controller_param_callback_handle_;
 
     rclcpp::Time last_cmd_time_;
     bool auto_torque_off_ = true;

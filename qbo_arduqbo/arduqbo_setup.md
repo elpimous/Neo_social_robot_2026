@@ -70,7 +70,7 @@ qbo_arduqbo:
 
 **Exemples**
 ```bash
-ros2 topic pub /qbo_arduqbo/base_ctrl/cmd_vel geometry_msgs/msg/Twist '{linear: {x: 0.2}, angular: {z: 0.1}}'
+ros2 topic pub /qbo_arduqbo/base_ctrl/cmd_vel geometry_msgs/msg/Twist '{linear: {x: 0.2}, angular: {z: 0.0}}'
 ros2 topic echo /qbo_arduqbo/base_ctrl/odom
 ros2 service call /qbo_arduqbo/base_ctrl/set_odometry qbo_msgs/srv/SetOdometry "{x: 1.0, y: 2.0, theta: 1.57}"
 ros2 service call /qbo_arduqbo/base_ctrl/stop_base std_srvs/srv/Empty "{}"
@@ -238,7 +238,7 @@ ros2 service call /qbo_arduqbo/mouth_ctrl/test_leds qbo_msgs/srv/TestLeds "{}"
 
 **Exemples**
 ```bash
-ros2 topic echo /qbo_arduqbo/sens_ctrl/srf10_state/front_left
+ros2 topic echo /qbo_arduqbo/sens_ctrl/distance_sensors_state/front_right_srf10
 ```
 
 ## 🚀 Lancement

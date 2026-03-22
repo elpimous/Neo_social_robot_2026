@@ -37,7 +37,7 @@ sudo nano /etc/udev/rules.d/99-usb-serial.rules
 SUBSYSTEM=="tty", KERNEL=="ttyUSB*", KERNELS=="1-2.2:1.0", SYMLINK+="ttyQboard2"
 
 # ttyDmx (USB1) par chemin physique
-SUBSYSTEM=="tty", KERNEL=="ttyUSB*", KERNELS=="1-2.2:1.1", SYMLINK+="ttyDmx"
+SUBSYSTEM=="tty", KERNEL=="ttyUSB2", KERNELS=="1-2.2:1.1", SYMLINK+="ttyDmx"
 
 # ttyQboard1 (USB2) identifié par idProduct
 SUBSYSTEM=="tty", ATTRS{idProduct}=="6001", SYMLINK+="ttyQboard1"
@@ -89,3 +89,29 @@ ls -l /dev/ttyDmx
 
 ## 📄 Conclusion
 Avec ces règles en place, les composants du robot Qbo auront des noms stables, permettant un démarrage fiable et reproductible à chaque redémarrage de la machine.
+
+--- ajout Vince 2026
+
+problemes avec ttyDmx !!
+
+sudo nano /etc/systemd/system/ttyDmx.service
+
+[Unit]
+Description=Créer le lien /dev/ttyDmx pour le port FTDI 2
+After=dev-ttyUSB2.device
+Wants=dev-ttyUSB2.device
+
+[Service]
+Type=oneshot
+ExecStart=/bin/ln -sf /dev/ttyUSB2 /dev/ttyDmx
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+
+
+sudo systemctl daemon-reload
+sudo systemctl enable ttyDmx.service
+sudo systemctl start ttyDmx.service
+
+ls -l /dev/ttyDmx

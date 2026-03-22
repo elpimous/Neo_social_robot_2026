@@ -2,8 +2,12 @@ qbo_arduqbo:
   ros__parameters:
       enable_qboard1: true
       port1: "/dev/ttyQboard1"
-      baud1: 115200
-      timeout1: 3.0
+      # vince : baud1 115200 → 500000 pour réduire le temps de transmission de 4.3×
+      # Cohérent avec Serial.begin(500000) dans ArduBot.cpp et serialProtocol.cpp
+      # Vérifier que le câble USB-série supporte 500000 baud (FTDI, CH340, CP2102 : OK)
+      # Vérifier : stty -F /dev/ttyQboard1 → doit afficher "speed 500000"
+      baud1: 500000
+      timeout1: 10.0        # ⬆️ 3.0 → 10.0s : nécessaire pour la calibration IMU
       enable_qboard2: true
       port2: "/dev/ttyQboard2"
       baud2: 115200
@@ -20,7 +24,7 @@ qbo_arduqbo:
 
 /qbo_arduqbo/battery_ctrl:
   ros__parameters:
-    rate: .0
+    rate: 1.0
     error_battery_level: 11.5
     warn_battery_level: 12.2
     capacity_ah: 10.0
@@ -29,24 +33,24 @@ qbo_arduqbo:
 
 /qbo_arduqbo/base_ctrl:
   ros__parameters:
-    rate: 15.0
+    rate: 20.0              # ✅ 2× LiDAR (10Hz), optimal pour Nav2
     topic: "base_ctrl/cmd_vel"
     odom_topic: "base_ctrl/odom"
     tf_odom_broadcast: true
 
 /qbo_arduqbo/imu_ctrl:
   ros__parameters:
-    rate: 15.0
+    rate: 20.0              # ✅ cohérent avec base_ctrl
     topic: "imu_ctrl/imu_state"
 
 /qbo_arduqbo/lcd_ctrl:
   ros__parameters:
-    rate: 1.0
+    rate: 1.0               # réduit charge QBoard1
     topic: "lcd_ctrl/cmd_lcd"
 
 /qbo_arduqbo/nose_ctrl:
   ros__parameters:
-    rate: 10.0
+    rate: 5.0
     topic: "nose_ctrl/cmd_nose"
 
 /qbo_arduqbo/mouth_ctrl:
@@ -61,31 +65,20 @@ qbo_arduqbo:
 
 /qbo_arduqbo/sens_ctrl:
   ros__parameters:
-    rate: 15.0
+    rate: 5.0
     topic: "sens_ctrl/distance_sensors_state"
 
     sensors.front.front_left_srf10.type: "srf10"
-    sensors.front.front_left_srf10.address: 112
+    sensors.front.front_left_srf10.address: 230
     sensors.front.front_left_srf10.frame_id: "front_left_addon"
-    sensors.front.front_left_srf10.publish_if_obstacle: true
+    sensors.front.front_left_srf10.publish_if_obstacle: false
 
     sensors.front.front_right_srf10.type: "srf10"
-    sensors.front.front_right_srf10.address: 113
+    sensors.front.front_right_srf10.address: 234
     sensors.front.front_right_srf10.frame_id: "front_right_addon"
-    sensors.front.front_right_srf10.publish_if_obstacle: true
-
-    sensors.back.back_left_srf10.type: "srf10"
-    sensors.back.back_left_srf10.address: 114
-    sensors.back.back_left_srf10.frame_id: "back_left_addon"
-    sensors.back.back_left_srf10.publish_if_obstacle: true
-
-    sensors.back.back_right_srf10.type: "srf10"
-    sensors.back.back_right_srf10.address: 115
-    sensors.back.back_right_srf10.frame_id: "back_right_addon"
-    sensors.back.back_right_srf10.publish_if_obstacle: true
+    sensors.front.front_right_srf10.publish_if_obstacle: false
 
     sensors.front.floor_sensor.type: "GP2Y0A21YK"
     sensors.front.floor_sensor.address: 8
     sensors.front.floor_sensor.frame_id: "front_addon"
-    sensors.front.floor_sensor.publish_if_obstacle: false
-
+    sensors.front.floor_sensor.publish_if_obstacle: true

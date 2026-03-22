@@ -46,12 +46,10 @@ QboDuinoDriver::QboDuinoDriver(std::string port1, int baud1, std::string port2, 
             if (code >= 0 && board_id == 0) {
                 boards_["base"] = &firstDevice;
                 timeouts_["base"] = &timeout1_;
-                // std::cout << "Base control board fount at " << port1 << " and inicialiced at " << baud1 << " baudrate" << std::endl;
                 any_detected = true;
             } else if (code >= 0 && board_id == 1) {
                 boards_["head"] = &firstDevice;
                 timeouts_["head"] = &timeout1_;
-                // std::cout << "Head control board fount at " << port1 << " and inicialiced at " << baud1 << " baudrate" << std::endl;
                 any_detected = true;
             } else {
                 std::cout << "Not QBO Board detected at " << port1 << std::endl;
@@ -103,8 +101,6 @@ QboDuinoDriver::QboDuinoDriver(std::string port1, int baud1, std::string port2, 
 int QboDuinoDriver::read(cereal::CerealPort *ser, std::string &lectura, long timeout)
 {
     std::string buf;
-    // int leidos = 0;
-    // int totalLeidos = 0;
 
     try
     {
@@ -113,7 +109,6 @@ int QboDuinoDriver::read(cereal::CerealPort *ser, std::string &lectura, long tim
             return -1;
         }
     }
-    // TODO: Capturar excepcion de forma correcta
     catch (...)
     {
         return -1;
@@ -220,23 +215,41 @@ int QboDuinoDriver::lockAndSendComand(std::string board, CComando &comand, std::
     int code = -3;
     if (boards_.count(board) == 0)
         return -2;
-    if (board.compare("base") == 0 && sending_data_mutex_.timed_lock(boost::posix_time::millisec(500)))
+
+    // ✅ CORRECTION : timeout mutex dynamique basé sur le timeout du port
+    // Ancienne valeur hardcodée : boost::posix_time::millisec(500)
+    // Problème : calibration IMU peut durer plusieurs secondes → mutex timeout trop court
+    // → tous les contrôleurs QBoard1 retournaient -3 pendant la calibration
+    if (board.compare("base") == 0)
     {
-        code = sendComand(board, comand, response, data);
-        sending_data_mutex_.unlock();
-        return code;
+        if (sending_data_mutex_.timed_lock(boost::posix_time::millisec(timeout1_ + 100)))
+        {
+            code = sendComand(board, comand, response, data);
+            sending_data_mutex_.unlock();
+            return code;
+        }
+        else
+        {
+            std::cout << "Mutex timeout (base)" << std::endl;
+            return -3;
+        }
     }
-    else
-        code = -3;
-    if (board.compare("head") == 0 && sending_data_head_mutex_.timed_lock(boost::posix_time::millisec(500)))
+
+    if (board.compare("head") == 0)
     {
-        code = sendComand(board, comand, response, data);
-        sending_data_head_mutex_.unlock();
-        return code;
+        if (sending_data_head_mutex_.timed_lock(boost::posix_time::millisec(timeout2_ + 100)))
+        {
+            code = sendComand(board, comand, response, data);
+            sending_data_head_mutex_.unlock();
+            return code;
+        }
+        else
+        {
+            std::cout << "Mutex timeout (head)" << std::endl;
+            return -3;
+        }
     }
-    else
-        code = -3;
-    std::cout << "Mutex timeout" << std::endl;
+
     return code;
 }
 
@@ -290,20 +303,6 @@ int QboDuinoDriver::setSpeed(float linear, float angular)
     return (lockAndSendComand("base", comand, resp, data));
 }
 
-// int QboDuinoDriver::setServo(uint8_t idx, unsigned short tics, unsigned short tics_per_second)
-// {
-//     dataUnion d;
-//     std::vector<dataUnion> data, resp;
-//     d.b = idx;
-//     data.push_back(d);
-//     d.h = tics;
-//     data.push_back(d);
-//     d.h = tics_per_second;
-//     data.push_back(d);
-//     CComando comand = comandosSet_.setServo;
-//     return (lockAndSendComand("head", comand, resp, data));
-// }
-
 int QboDuinoDriver::getOdometry(float &x, float &y, float &th)
 {
     std::vector<dataUnion> data, sent;
@@ -326,48 +325,9 @@ int QboDuinoDriver::setOdometry(float x, float y, float th)
     input[2].f = th;
 
     CComando comand = comandosSet_.setOdometry;
-
-    // ordre corrigé : (destination, commande, réception, émission)
     return lockAndSendComand("base", comand, output, input);
 }
 
-// int QboDuinoDriver::getServoPosition(uint8_t idx, unsigned short &tics)
-// {
-//     dataUnion d;
-//     std::vector<dataUnion> data, sent;
-//     d.b = idx;
-//     sent.push_back(d);
-//     CComando comand = comandosSet_.getServo;
-//     int code = lockAndSendComand("head", comand, data, sent);
-//     if (code < 0)
-//         return code;
-//     tics = data[0].h;
-//     return code;
-// }
-// int QboDuinoDriver::getHeadServosPositions(std::vector<unsigned short> &tics)
-// {
-//     dataUnion d;
-//     std::vector<dataUnion> data, sent;
-//     CComando comand = comandosSet_.getHeadServos;
-//     int code = lockAndSendComand("head", comand, data, sent);
-//     if (code < 0)
-//         return code;
-//     tics.push_back(data[0].h);
-//     tics.push_back(data[1].h);
-//     return code;
-// }
-// int QboDuinoDriver::getEyesServosPositions(std::vector<unsigned short> &tics)
-// {
-//     dataUnion d;
-//     std::vector<dataUnion> data, sent;
-//     CComando comand = comandosSet_.getEyeServos;
-//     int code = lockAndSendComand("head", comand, data, sent);
-//     if (code < 0)
-//         return code;
-//     tics.push_back(data[0].h);
-//     tics.push_back(data[1].h);
-//     return code;
-// }
 int QboDuinoDriver::setMouth(uint8_t b0, uint8_t b1, uint8_t b2)
 {
     dataUnion d;
@@ -389,7 +349,6 @@ int QboDuinoDriver::testMouth()
 
     CComando comand = comandosSet_.testMouth;
     int code = lockAndSendComand("head", comand, data, sent);
-    // printf("command (code: %d)\n", code);
     return code;
 }
 
@@ -402,7 +361,6 @@ int QboDuinoDriver::setNose(uint8_t nose)
 
     CComando comand = comandosSet_.nose;
     int code = lockAndSendComand("head", comand, resp, data);
-    // printf("command (code: %d)\n", code);
     return code;
 }
 
@@ -412,7 +370,6 @@ int QboDuinoDriver::testNose()
 
     CComando comand = comandosSet_.testNose;
     int code = lockAndSendComand("head", comand, data, sent);
-    // printf("command (code: %d)\n", code);
     return code;
 }
 
@@ -456,15 +413,10 @@ int QboDuinoDriver::getMicReport(int16_t &ambient_noise, uint8_t &sound_directio
 {
     std::vector<dataUnion> data, sent;
 
-    CComando command = comandosSet_.getMicReport;  // correspond à 0x4B
+    CComando command = comandosSet_.getMicReport;
     int code = lockAndSendComand("head", command, data, sent);
-    // printf("➡️ getMicReport: code=%d, data.size()=%zu\n", code, data.size());
-    // for (size_t i = 0; i < data.size(); ++i) {
-    //     printf("  data[%zu] = h:%d b:%u\n", i, data[i].h, data[i].b);
-    // }
     if (code < 0) return -1;
 
-    // Ordre de retour Arduino : [amb (h), dir (b), mic0 (h), mic1 (h), mic2 (h)]
     ambient_noise   = data[0].h;
     sound_direction = data[1].b;
     m0 = data[2].h;
@@ -474,23 +426,11 @@ int QboDuinoDriver::getMicReport(int16_t &ambient_noise, uint8_t &sound_directio
     return code;
 }
 
-// int QboDuinoDriver::setMic(uint8_t mic)
-// {
-//     dataUnion d;
-//     std::vector<dataUnion> data, resp;
-//     d.b = mic;
-//     data.push_back(d);
-
-//     CComando comand = comandosSet_.setMic;
-//     return (lockAndSendComand("head", comand, resp, data));
-// }
-
 int QboDuinoDriver::setAutoupdateSensors(std::map<uint8_t, uint8_t> sensors)
 {
     dataUnion d;
     std::vector<dataUnion> data, resp;
     std::map<uint8_t, uint8_t>::iterator it;
-    // printf("🔁 setAutoupdateSensors: preparing %lu sensors\n", sensors.size());
     for (it = sensors.begin(); it != sensors.end(); ++it)
     {
         uint8_t addr  = it->first;
@@ -500,23 +440,11 @@ int QboDuinoDriver::setAutoupdateSensors(std::map<uint8_t, uint8_t> sensors)
         data.push_back(d);
         d.b = group;
         data.push_back(d);
-        // printf("  ↪ Sensor addr: %u | group: %u\n", addr, group);
     }
 
     CComando comand = comandosSet_.setAutoupdateSrfs;
-
-    int ret = lockAndSendComand("base", comand, resp, data);
-    // if (ret < 0)
-    // {
-    //     printf("❌ setAutoupdateSensors: failed to send command (code: %d)\n", ret);
-    // }
-    // else
-    // {
-    //     printf("✅ setAutoupdateSensors: command sent successfully\n");
-    // }
-    return ret;
+    return lockAndSendComand("base", comand, resp, data);
 }
-
 
 int QboDuinoDriver::getDistanceSensors(std::map<uint8_t, unsigned short> &sensorsDistances)
 {
@@ -537,40 +465,29 @@ int QboDuinoDriver::getDistanceSensors(std::map<uint8_t, unsigned short> &sensor
 
 int QboDuinoDriver::setParametersSensors(const std::map<uint8_t, float> &minAlertDistances)
 {
-    // Commande qui correspond au case SET_PARAMETERS_SENSORS côté Arduino
     CComando command = comandosSet_.setParametersSensors;
 
-    // Préparation des données envoyées
-    // L’Arduino attend des paires (addr, minDistRaw) où minDistRaw = distance * 100
     std::vector<dataUnion> req, resp;
 
     for (const auto &kv : minAlertDistances)
     {
         uint8_t addr = kv.first;
-        float minDist = kv.second; // en mètres, par ex. 0.20
+        float minDist = kv.second;
 
-        // Premier octet : l’adresse
         dataUnion d;
         d.b = addr;
         req.push_back(d);
 
-        // Deuxième octet : la distance * 100
         dataUnion d2;
         uint8_t minDistRaw = static_cast<uint8_t>(minDist * 100.0f + 0.5f);
         d2.b = minDistRaw;
         req.push_back(d2);
     }
 
-    // Envoi de la commande
     int ret = lockAndSendComand("base", command, resp, req);
     if (ret < 0)
-    {
-        // ROS_ERROR("Failed to send SET_PARAMETERS_SENSORS to Arduino");
         return ret;
-    }
 
-    // Optionnel : vérifier un ACK dans 'resp'
-    // ...
     return 0;
 }
 
@@ -612,7 +529,6 @@ int QboDuinoDriver::getIMU(int16_t &gyroX, int16_t &gyroY, int16_t &gyroZ, int16
     accelerometerX = (int16_t)data[3].b;
     accelerometerY = (int16_t)data[4].b;
     accelerometerZ = (int16_t)data[5].b;
-    // printf("x:%d, y:%d, z:%d, \n",accelerometerX,accelerometerY,accelerometerZ);
     return code;
 }
 

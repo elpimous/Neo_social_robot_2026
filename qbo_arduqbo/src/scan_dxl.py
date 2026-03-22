@@ -3,7 +3,7 @@
 from dynamixel_sdk import *  # pip install dynamixel-sdk
 
 # === Configuration ===
-PORT = "/dev/ttyUSB1"         # Modifie ici si besoin
+PORT = "/dev/ttyDmx"         # Modifie ici si besoin
 BAUDRATE = 1000000            # AX-12/18A par défaut : 57600
 PROTOCOL_VERSION = 1.0        # AX-18A utilise protocole 1.0
 ID_RANGE = range(1, 11)       # ID à scanner (1 à 10)

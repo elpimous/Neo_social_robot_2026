@@ -5,7 +5,6 @@
 #include <string>
 
 #include "rclcpp/rclcpp.hpp"
-#include "rclcpp/executors/multi_threaded_executor.hpp"
 #include "qbo_arduqbo/drivers/i2c_bus_driver.hpp"
 #include "qbo_arduqbo/drivers/qboduino_driver.h"
 #include "qbo_arduqbo/controllers/battery_controller.hpp"
@@ -31,8 +30,7 @@ private:
     std::shared_ptr<I2CBusDriver> i2c_driver_;
     std::shared_ptr<QboDuinoDriver> arduino_driver_;
     std::vector<std::shared_ptr<rclcpp::Node>> controllers_;  // Pour garder les instances
-    // rclcpp::executors::SingleThreadedExecutor::SharedPtr executor_; // pour séparer les callbacks, stopper le bloquant !
-    rclcpp::executors::MultiThreadedExecutor::SharedPtr executor_;
+    rclcpp::executors::SingleThreadedExecutor::SharedPtr executor_;
     rclcpp::NodeOptions node_options_;
     std::string port1_;
     std::string port2_;

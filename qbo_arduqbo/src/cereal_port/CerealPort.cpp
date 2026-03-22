@@ -23,6 +23,28 @@ cereal::CerealPort::~CerealPort() {
   stopStream();
 }
 
+// vince : conversion int → speed_t pour cfsetspeed()
+// cfsetspeed() n'accepte pas un entier brut (ex: 115200) mais une constante speed_t
+// encodée (ex: B115200 = 4098 en octal). Passer un int brut → baud rate incorrect.
+// Le chip FTDI FT232 (vendor 0403) supporte nativement jusqu'à 921600 baud.
+// ⚠️ B500000 et B921600 sont définis dans <termios.h> sur Linux mais pas sur tous les OS.
+static speed_t cereal_to_speed_t(int baud) {
+    switch (baud) {
+        case 9600:   return B9600;
+        case 19200:  return B19200;
+        case 38400:  return B38400;
+        case 57600:  return B57600;
+        case 115200: return B115200;
+        case 230400: return B230400;
+        case 500000: return B500000;  // FTDI FT232 : 48MHz/96 = 500000, erreur 0%
+        case 921600: return B921600;
+        default:
+            CEREAL_EXCEPT(cereal::Exception,
+                "Baud rate %d non supporté — valeurs valides : 9600, 19200, 38400, "
+                "57600, 115200, 230400, 500000, 921600", baud);
+    }
+}
+
 void cereal::CerealPort::open(const char *port_name, int baud_rate) {
   if (portOpen()) close();
 
@@ -61,7 +83,10 @@ void cereal::CerealPort::open(const char *port_name, int baud_rate) {
     newtio.c_iflag = IGNPAR;
     newtio.c_oflag = 0;
     newtio.c_lflag = 0;
-    cfsetspeed(&newtio, baud_rate);
+    // vince : utilisation de cereal_to_speed_t() au lieu de passer baud_rate brut
+    // Ancienne ligne : cfsetspeed(&newtio, baud_rate) → comportement indéfini
+    // Nouvelle ligne  : conversion explicite int → speed_t via switch/case
+    cfsetspeed(&newtio, cereal_to_speed_t(baud_rate));
     baud_ = baud_rate;
 
     tcflush(fd_, TCIFLUSH);
@@ -128,7 +153,7 @@ bool cereal::CerealPort::readLine(std::string *buffer, int timeout) {
   buffer->clear();
   char c;
   while (buffer->size() < buffer->max_size() / 2) {
-    int r = read(&c, 1, timeout);
+    if (read(&c, 1, timeout) > 0)
     buffer->push_back(c);
     if (c == '\n') return true;
   }
@@ -140,7 +165,7 @@ bool cereal::CerealPort::readBetween(std::string *buffer, char start, char end, 
   char c;
   bool started = false;
   while (buffer->size() < buffer->max_size() / 2) {
-    int r = read(&c, 1, timeout);
+    if (read(&c, 1, timeout) <= 0) continue;
     if (!started) {
       if (c == start) {
         started = true;

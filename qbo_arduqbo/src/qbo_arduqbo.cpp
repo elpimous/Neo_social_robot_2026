@@ -13,7 +13,15 @@ QboArduqboManager::QboArduqboManager(std::shared_ptr<rclcpp::Node> node,
 }
 
 void QboArduqboManager::setup() {
-    executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+
+    // ✅ CORRECTION : MultiThreadedExecutor au lieu de SingleThreadedExecutor
+    // SingleThreadedExecutor sérialisait tous les callbacks → base_ctrl bloqué par sens_ctrl
+    // → rate effectif de 15Hz au lieu de 30Hz configuré
+    // 8 threads = 1 par cœur ARM Cortex-A78AE sur Jetson Orin NX
+    executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>(
+        rclcpp::ExecutorOptions(), 8
+    );
+
     updater_ = std::make_unique<diagnostic_updater::Updater>(node_);
     auto qboard1_id_diag = std::make_shared<int>(-1);
     auto qboard1_version_diag = std::make_shared<int>(-1);
@@ -122,7 +130,7 @@ void QboArduqboManager::setup() {
             controllers_.push_back(imu_ctrl);
             loaded = true;
         }
-        logControllerStatus("IMU base", enable_nose_, loaded);
+        logControllerStatus("IMU base", enable_imu_base_, loaded);
 
         loaded = false;
         if (enable_lcd_) {
@@ -139,7 +147,6 @@ void QboArduqboManager::setup() {
             loaded = true;
         }
         logControllerStatus("Sensors", enable_sensors_, loaded);
-
 
     } else {
         RCLCPP_WARN(node_->get_logger(), "❌ Base board communication disabled by config");
@@ -228,7 +235,6 @@ int main(int argc, char **argv)
         std::string port1 = "";
         std::string port2 = "";
 
-        // Récupération des valeurs
         node->get_parameter("port1", port1);
         node->get_parameter("port2", port2);
 
@@ -257,4 +263,3 @@ int main(int argc, char **argv)
     rclcpp::shutdown();
     return 0;
 }
-

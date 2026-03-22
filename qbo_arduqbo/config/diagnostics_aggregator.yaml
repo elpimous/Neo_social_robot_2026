@@ -4,7 +4,7 @@ analyzers:
     qbo_arduqbo:
         type: diagnostic_aggregator/GenericAnalyzer
         path: System Status
-        startswith: ['qbo_arduqbo: Controller Status']
+        startswith: ['qbo_arduqbo: Arduqbo Status']
         remove_prefix: ['qbo_arduqbo: ']
 
     battery:
