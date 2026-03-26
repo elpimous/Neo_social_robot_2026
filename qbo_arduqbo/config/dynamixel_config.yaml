@@ -1,9 +1,9 @@
 # dynamixel_config.yaml
 
-qbo_dynamixel:
+dynamixel_hardware:
   ros__parameters:
     dynamixel.usb_port: "/dev/ttyDmx"
-    dynamixel.baud_rate: 500000
+    dynamixel.baud_rate: 1000000
     dynamixel.protocol_version: 1.0
 
     dynamixel_state_rate_hz: 1
@@ -19,6 +19,7 @@ qbo_dynamixel:
     auto_torque_off_timeout: 20.0
 
     dynamixel.motor_keys: ["motor_1", "motor_2"]
+    
     # Servo 1 : head_pan_joint (<--->)
     dynamixel.motors.motor_1.name: head_pan_joint
     dynamixel.motors.motor_1.id: 1
@@ -28,8 +29,8 @@ qbo_dynamixel:
     dynamixel.motors.motor_1.range: 300.0
     dynamixel.motors.motor_1.ticks: 1024
     dynamixel.motors.motor_1.neutral: 530
-    dynamixel.motors.motor_1.torque_limit: 800
-    dynamixel.motors.motor_1.max_speed: 3.0
+    dynamixel.motors.motor_1.torque_limit: 800 # 800
+    dynamixel.motors.motor_1.max_speed: 5.0 # 3.0
 
     # Servo 2 : head_tilt_joint (￪↓)
     dynamixel.motors.motor_2.name: head_tilt_joint
@@ -40,5 +41,5 @@ qbo_dynamixel:
     dynamixel.motors.motor_2.range: 300.0
     dynamixel.motors.motor_2.ticks: 1024
     dynamixel.motors.motor_2.neutral: 465
-    dynamixel.motors.motor_2.torque_limit: 800
-    dynamixel.motors.motor_2.max_speed: 3.0
+    dynamixel.motors.motor_2.torque_limit: 800 # 800
+    dynamixel.motors.motor_2.max_speed: 3.0 # 3.0
