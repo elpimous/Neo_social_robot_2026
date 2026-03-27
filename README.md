@@ -1,3 +1,4 @@
+![Bannière](img/banniere.png)
 # NEO — Corrections firmware + ROS2
 ## Récapitulatif des modifications
 -------------------------------------------------------------
