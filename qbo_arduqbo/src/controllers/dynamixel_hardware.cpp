@@ -20,33 +20,28 @@ hardware_interface::CallbackReturn DynamixelHardware::on_init(const hardware_int
     RCLCPP_INFO(rclcpp::get_logger("DynamixelHardware"), "Opening port %s @ %d bps", port_.c_str(), baud_rate_);
 
     if (!dxl_wb_.init(port_.c_str(), baud_rate_)) {
-        RCLCPP_FATAL(rclcpp::get_logger("DynamixelHardware"), "Failed to init DynamixelWorkbench on %s @ %d bps", port_.c_str(), baud_rate_);
+        RCLCPP_FATAL(rclcpp::get_logger("DynamixelHardware"),
+            "Failed to init DynamixelWorkbench on %s @ %d bps", port_.c_str(), baud_rate_);
         return hardware_interface::CallbackReturn::ERROR;
     }
     dxl_wb_.setPacketHandler(protocol_version_);
 
     servos_.clear();
 
-    // 1. Ping tous les servos d'abord
     for (const auto & joint : info.joints) {
         Servo s;
-        s.name        = joint.name;
-        s.id          = std::stoi(joint.parameters.at("id"));
-        s.neutral     = std::stoi(joint.parameters.at("neutral"));
-        s.ticks       = std::stoi(joint.parameters.at("ticks"));
+        s.name         = joint.name;
+        s.id           = std::stoi(joint.parameters.at("id"));
+        s.neutral      = std::stoi(joint.parameters.at("neutral"));
+        s.ticks        = std::stoi(joint.parameters.at("ticks"));
         s.rad_per_tick = M_PI / (s.ticks / 2.0);
         s.torque_limit = std::stoi(joint.parameters.at("torque_limit"));
-        s.invert      = (joint.parameters.at("invert") == "true");
-        s.max_speed = joint.parameters.count("max_speed") ? std::stod(joint.parameters.at("max_speed")) : 1.0;
-        s.min_angle = joint.parameters.count("min_angle") ? std::stod(joint.parameters.at("min_angle")) : -1.22;
-        s.max_angle = joint.parameters.count("max_angle") ? std::stod(joint.parameters.at("max_angle")) :  1.22;
-        s.position    = 0.0;
-        s.velocity    = 0.0;
-        s.effort      = 0.0;
-        s.command     = 0.0;
-        s.temperature = 0.0;
-        s.torque_load = 0.0;
-        s.torque_enabled = false;
+        s.invert       = (joint.parameters.at("invert") == "true");
+        s.max_speed    = joint.parameters.count("max_speed") ? std::stod(joint.parameters.at("max_speed")) : 1.0;
+        s.min_angle    = joint.parameters.count("min_angle") ? std::stod(joint.parameters.at("min_angle")) : -1.22;
+        s.max_angle    = joint.parameters.count("max_angle") ? std::stod(joint.parameters.at("max_angle")) :  1.22;
+        s.position     = 0.0; s.velocity = 0.0; s.effort = 0.0; s.command = 0.0;
+        s.temperature  = 0.0; s.torque_load = 0.0; s.torque_enabled = false;
 
         RCLCPP_INFO(rclcpp::get_logger("DynamixelHardware"), "Pinging servo ID %d...", s.id);
 
@@ -74,57 +69,42 @@ hardware_interface::CallbackReturn DynamixelHardware::on_init(const hardware_int
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
-    // 2. Configuration + centrage
     for (auto & s : servos_) {
         dxl_wb_.itemWrite(s.id, "Torque_Limit", s.torque_limit);
         dxl_wb_.torqueOn(s.id);
         s.torque_enabled = true;
         dxl_wb_.itemWrite(s.id, "Goal_Position", s.neutral);
-
         RCLCPP_INFO(rclcpp::get_logger("DynamixelHardware"),
             "Servo %s (ID %d) configure et centre - neutral=%d, invert=%d",
             s.name.c_str(), s.id, s.neutral, s.invert);
     }
 
-    // 3. Diagnostics
-    diag_node_ = rclcpp::Node::make_shared("dynamixel_diagnostics");
+    diag_node_    = rclcpp::Node::make_shared("dynamixel_diagnostics");
     diag_updater_ = std::make_shared<diagnostic_updater::Updater>(diag_node_);
     diag_updater_->setHardwareID("DynamixelAX12");
-
     for (size_t i = 0; i < servos_.size(); i++) {
-        diag_updater_->add(
-            "Servo " + servos_[i].name,
+        diag_updater_->add("Servo " + servos_[i].name,
             [this, i](diagnostic_updater::DiagnosticStatusWrapper & stat) {
                 diagnosticCallback(stat, i);
-            }
-        );
+            });
     }
 
-    RCLCPP_INFO(rclcpp::get_logger("DynamixelHardware"), "DynamixelHardware initialized with %zu servos", servos_.size());
+    RCLCPP_INFO(rclcpp::get_logger("DynamixelHardware"),
+        "DynamixelHardware initialized with %zu servos", servos_.size());
     return hardware_interface::CallbackReturn::SUCCESS;
 }
 
 void DynamixelHardware::diagnosticCallback(diagnostic_updater::DiagnosticStatusWrapper & stat, int idx)
 {
     const Servo & s = servos_[idx];
-
-    stat.add("Position (rad)",     s.position);
-    stat.add("Velocity (rad/s)",   s.velocity);
-    stat.add("Torque load",        s.torque_load);
-    stat.add("Temperature (C)",    s.temperature);
-    stat.add("Torque enabled",     s.torque_enabled ? "true" : "false");
-
-    // Niveau de criticité selon température
-    if (s.temperature >= 70.0) {
-        stat.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR,
-            "Temperature critique !");
-    } else if (s.temperature >= 60.0) {
-        stat.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN,
-            "Temperature elevee");
-    } else {
-        stat.summary(diagnostic_msgs::msg::DiagnosticStatus::OK,
-            "OK");
-    }
+    stat.add("Position (rad)",   s.position);
+    stat.add("Velocity (rad/s)", s.velocity);
+    stat.add("Torque load",      s.torque_load);
+    stat.add("Temperature (C)",  s.temperature);
+    stat.add("Torque enabled",   s.torque_enabled ? "true" : "false");
+    if      (s.temperature >= 70.0) stat.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "Temperature critique !");
+    else if (s.temperature >= 60.0) stat.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN,  "Temperature elevee");
+    else                            stat.summary(diagnostic_msgs::msg::DiagnosticStatus::OK,     "OK");
 }
 
 hardware_interface::CallbackReturn DynamixelHardware::on_configure(const rclcpp_lifecycle::State &)
@@ -151,22 +131,21 @@ hardware_interface::CallbackReturn DynamixelHardware::on_deactivate(const rclcpp
 
 std::vector<hardware_interface::StateInterface> DynamixelHardware::export_state_interfaces()
 {
-    std::vector<hardware_interface::StateInterface> state_interfaces;
+    std::vector<hardware_interface::StateInterface> si;
     for (auto & s : servos_) {
-        state_interfaces.emplace_back(hardware_interface::StateInterface(s.name, "position",    &s.position));
-        state_interfaces.emplace_back(hardware_interface::StateInterface(s.name, "velocity",    &s.velocity));
-        state_interfaces.emplace_back(hardware_interface::StateInterface(s.name, "effort",      &s.effort));
+        si.emplace_back(hardware_interface::StateInterface(s.name, "position", &s.position));
+        si.emplace_back(hardware_interface::StateInterface(s.name, "velocity", &s.velocity));
+        si.emplace_back(hardware_interface::StateInterface(s.name, "effort",   &s.effort));
     }
-    return state_interfaces;
+    return si;
 }
 
 std::vector<hardware_interface::CommandInterface> DynamixelHardware::export_command_interfaces()
 {
-    std::vector<hardware_interface::CommandInterface> command_interfaces;
-    for (auto & s : servos_) {
-        command_interfaces.emplace_back(hardware_interface::CommandInterface(s.name, "position", &s.command));
-    }
-    return command_interfaces;
+    std::vector<hardware_interface::CommandInterface> ci;
+    for (auto & s : servos_)
+        ci.emplace_back(hardware_interface::CommandInterface(s.name, "position", &s.command));
+    return ci;
 }
 
 hardware_interface::return_type DynamixelHardware::read(const rclcpp::Time &, const rclcpp::Duration &)
@@ -175,11 +154,10 @@ hardware_interface::return_type DynamixelHardware::read(const rclcpp::Time &, co
         int32_t pos = 0, vel = 0, load = 0, temp = 0, torque_en = 0;
 
         if (!dxl_wb_.itemRead(s.id, "Present_Position", &pos)) {
-            // ⚠️ Ne pas retourner ERROR — juste logguer et garder la dernière valeur connue
             RCLCPP_WARN_THROTTLE(rclcpp::get_logger("DynamixelHardware"),
                 *rclcpp::Clock::make_shared(), 2000,
-                "Cannot read servo %d (torque OFF?), keeping last values", s.id);
-            continue;  // ← on passe au servo suivant sans planter
+                "Cannot read servo %d, keeping last values", s.id);
+            continue;
         }
 
         dxl_wb_.itemRead(s.id, "Present_Speed",       &vel);
@@ -188,8 +166,8 @@ hardware_interface::return_type DynamixelHardware::read(const rclcpp::Time &, co
         dxl_wb_.itemRead(s.id, "Torque_Enable",       &torque_en);
 
         s.position       = ticksToAngle(s, pos);
-        s.velocity       = vel * 0.01194;
-        s.torque_load    = static_cast<double>(load);
+        s.velocity       = ((vel  & 0x400) ? -1 : 1) * (vel  & 0x3FF) * 0.01194;
+        s.torque_load    = ((load & 0x400) ? -1 : 1) * (load & 0x3FF);
         s.temperature    = static_cast<double>(temp);
         s.torque_enabled = (torque_en != 0);
         s.effort         = s.torque_load;
@@ -200,7 +178,7 @@ hardware_interface::return_type DynamixelHardware::read(const rclcpp::Time &, co
         rclcpp::spin_some(diag_node_);
     }
 
-    return hardware_interface::return_type::OK;  // ← toujours OK
+    return hardware_interface::return_type::OK;
 }
 
 hardware_interface::return_type DynamixelHardware::write(const rclcpp::Time &, const rclcpp::Duration &)
@@ -208,7 +186,8 @@ hardware_interface::return_type DynamixelHardware::write(const rclcpp::Time &, c
     for (auto & s : servos_) {
         int goal = angleToTicks(s, s.command);
         if (!dxl_wb_.itemWrite(s.id, "Goal_Position", goal)) {
-            RCLCPP_WARN(rclcpp::get_logger("DynamixelHardware"), "Failed to write goal to servo %d", s.id);
+            RCLCPP_WARN(rclcpp::get_logger("DynamixelHardware"),
+                "Failed to write goal to servo %d", s.id);
             return hardware_interface::return_type::ERROR;
         }
     }
@@ -217,7 +196,6 @@ hardware_interface::return_type DynamixelHardware::write(const rclcpp::Time &, c
 
 int DynamixelHardware::angleToTicks(const Servo & servo, double rad)
 {
-    // ✅ Clamp aux limites mécaniques du servo
     double clamped = std::clamp(rad, servo.min_angle, servo.max_angle);
     if (servo.invert) clamped = -clamped;
     return static_cast<int>(std::round(clamped / servo.rad_per_tick)) + servo.neutral;
