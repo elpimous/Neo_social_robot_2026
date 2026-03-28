@@ -83,6 +83,10 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    // ✅ Publisher /joint_states — position réelle lue depuis les servos
+    auto joint_state_pub = node->create_publisher<sensor_msgs::msg::JointState>(
+        "/joint_states", 10);
+
     // ✅ Subscriber /cmd_joints avec clamp position + vitesse
     auto cmd_sub = node->create_subscription<sensor_msgs::msg::JointState>(
         "/cmd_joints", 10,
@@ -209,12 +213,28 @@ int main(int argc, char **argv)
                 }
             }
 
-            for (const auto & s : hardware->getServos()) {
+            // ✅ Publier /joint_states avec les positions réelles des servos
+            const auto & servos = hardware->getServos();
+            sensor_msgs::msg::JointState js_msg;
+            js_msg.header.stamp = node->get_clock()->now();
+            js_msg.name.reserve(servos.size());
+            js_msg.position.reserve(servos.size());
+            js_msg.velocity.reserve(servos.size());
+            js_msg.effort.reserve(servos.size());
+
+            for (const auto & s : servos) {
+                js_msg.name.push_back(s.name);
+                js_msg.position.push_back(s.position);
+                js_msg.velocity.push_back(s.velocity);
+                js_msg.effort.push_back(s.effort);
+
                 RCLCPP_INFO(node->get_logger(),
                     "Motor %s (ID %d): pos=%.3f rad  temp=%.0f°C  torque=%s",
                     s.name.c_str(), s.id, s.position, s.temperature,
                     s.torque_enabled ? "ON" : "OFF");
             }
+
+            joint_state_pub->publish(js_msg);
         }
         rclcpp::spin_some(node);
         rate.sleep();
