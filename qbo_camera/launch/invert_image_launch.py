@@ -19,7 +19,7 @@ def generate_launch_description():
                 'video_device':    '/dev/video0',
                 'image_width':     640,
                 'image_height':    480,
-                'framerate':       50.0,
+                'framerate':       30.0,
                 'pixel_format':    'yuyv'
             }]
         ),
