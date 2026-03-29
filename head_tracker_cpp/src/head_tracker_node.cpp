@@ -83,6 +83,7 @@ public:
 
         // Vitesse proportionnelle à l'erreur
         this->declare_parameter("vel_gain",      4.0);
+        this->declare_parameter("vel_exponent",  0.7);
         this->declare_parameter("min_vel",       0.3);
         this->declare_parameter("max_pan_vel",   5.0);
         this->declare_parameter("max_tilt_vel",  3.0);
@@ -188,6 +189,7 @@ private:
 
     // ── Vitesse (proportionnelle à l'erreur) ────────────────────────
     double vel_gain_       = 4.0;
+    double vel_exponent_   = 0.7;
     double min_vel_        = 0.3;
     double max_pan_vel_    = 5.0;
     double max_tilt_vel_   = 3.0;
@@ -258,6 +260,7 @@ private:
         pid_tilt_.kd = this->get_parameter("pid_tilt_kd").as_double();
 
         vel_gain_       = this->get_parameter("vel_gain").as_double();
+        vel_exponent_   = this->get_parameter("vel_exponent").as_double();
         min_vel_        = this->get_parameter("min_vel").as_double();
         max_pan_vel_    = this->get_parameter("max_pan_vel").as_double();
         max_tilt_vel_   = this->get_parameter("max_tilt_vel").as_double();
@@ -306,6 +309,7 @@ private:
             else if (n == "pid_tilt_ki")    { pid_tilt_.ki      = p.as_double(); pid_tilt_.reset(); }
             else if (n == "pid_tilt_kd")      pid_tilt_.kd      = p.as_double();
             else if (n == "vel_gain")         vel_gain_         = p.as_double();
+            else if (n == "vel_exponent")     vel_exponent_     = p.as_double();
             else if (n == "min_vel")          min_vel_          = p.as_double();
             else if (n == "max_pan_vel")      max_pan_vel_      = p.as_double();
             else if (n == "max_tilt_vel")     max_tilt_vel_     = p.as_double();
@@ -483,11 +487,27 @@ private:
         double tilt_raw = std::clamp(ref_tilt + tilt_correction,
                                      min_tilt_angle_, max_tilt_angle_);
 
-        // ── Vitesse proportionnelle à l'erreur ──
-        double pan_vel_raw  = std::clamp(std::abs(err_pan_rad)  * vel_gain_,
-                                         min_vel_, max_pan_vel_);
-        double tilt_vel_raw = std::clamp(std::abs(err_tilt_rad) * vel_gain_,
-                                         min_vel_, max_tilt_vel_);
+        // - petite erreur → mouvement très doux
+        // - grande erreur → mouvement rapide
+        //
+        // Formule : |erreur|^exposant * gain
+        // exposant < 1 → adoucit les petites erreurs
+        // ─────────────────────────────────────────────────────────────
+
+        // Sécurité : éviter pow(0, exponent) instable
+        double abs_err_pan  = std::max(std::abs(err_pan_rad),  1e-6);
+        double abs_err_tilt = std::max(std::abs(err_tilt_rad), 1e-6);
+
+        // Transformation non linéaire
+        double pan_vel_nl  = std::pow(abs_err_pan,  vel_exponent_) * vel_gain_;
+        double tilt_vel_nl = std::pow(abs_err_tilt, vel_exponent_) * vel_gain_;
+
+        // Clamp final (min/max)
+        double pan_vel_raw  = std::clamp(pan_vel_nl,
+                min_vel_, max_pan_vel_);
+
+        double tilt_vel_raw = std::clamp(tilt_vel_nl,
+                min_vel_, max_tilt_vel_);
 
         // ── Lissage passe-bas ──
         double pan_pos  = lp_pan_pos_.filter(pan_raw);

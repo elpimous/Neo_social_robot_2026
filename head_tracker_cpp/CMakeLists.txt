@@ -7,6 +7,12 @@ find_package(sensor_msgs REQUIRED)
 
 add_executable(head_tracker_node src/head_tracker_node.cpp)
 
+install(DIRECTORY
+  launch
+  config
+  DESTINATION share/${PROJECT_NAME}
+)
+
 ament_target_dependencies(head_tracker_node
   rclcpp
   sensor_msgs
