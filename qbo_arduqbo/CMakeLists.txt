@@ -13,6 +13,9 @@ endif()
 # --------------------
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
+find_package(hardware_interface REQUIRED)
+find_package(controller_interface REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
@@ -21,10 +24,10 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(dynamixel_workbench_toolbox REQUIRED)
+find_package(dynamixel_sdk REQUIRED)
 find_package(diagnostic_updater REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(diagnostic_aggregator REQUIRED)
-# find_package(rqt_robot_monitor REQUIRED)
 find_package(qbo_msgs REQUIRED)
 
 include_directories(include)
@@ -42,12 +45,22 @@ add_library(qbo_serial
 target_link_libraries(qbo_serial pthread)
 ament_target_dependencies(qbo_serial rclcpp)
 
-# --- Contrôleur Dynamixel
-add_library(dynamixel_controller_lib src/controllers/dynamixel_controller.cpp)
-ament_target_dependencies(dynamixel_controller_lib
-  rclcpp sensor_msgs std_msgs
-  tf2 tf2_ros tf2_geometry_msgs
-  dynamixel_workbench_toolbox diagnostic_updater qbo_msgs
+# --- Contrôleur Dynamixel ROS2 Control
+add_library(dynamixel_hardware_lib src/controllers/dynamixel_hardware.cpp)
+ament_target_dependencies(dynamixel_hardware_lib
+  rclcpp
+  rclcpp_lifecycle
+  hardware_interface
+  controller_interface
+  sensor_msgs
+  std_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  dynamixel_workbench_toolbox
+  dynamixel_sdk
+  diagnostic_updater
+  qbo_msgs
 )
 
 # --- Contrôleurs Qbo
@@ -92,18 +105,25 @@ ament_target_dependencies(sensor_controller
   diagnostic_updater
 )
 
-
 # ====================================
 # EXECUTABLES
 # ====================================
 
-# --- Noeud Dynamixel
+# --- Noeud Dynamixel (ROS2 Control)
 add_executable(qbo_dynamixel src/qbo_dynamixel.cpp)
-target_link_libraries(qbo_dynamixel dynamixel_controller_lib)
+target_link_libraries(qbo_dynamixel dynamixel_hardware_lib)
 ament_target_dependencies(qbo_dynamixel
-  rclcpp sensor_msgs std_msgs
-  tf2 tf2_ros
-  dynamixel_workbench_toolbox diagnostic_updater qbo_msgs
+  rclcpp
+  rclcpp_lifecycle
+  sensor_msgs
+  std_msgs
+  tf2
+  tf2_ros
+  dynamixel_workbench_toolbox
+  diagnostic_updater
+  qbo_msgs
+  hardware_interface
+  controller_interface
 )
 
 # --- Noeud Qbo Arduqbo
@@ -111,7 +131,6 @@ add_executable(qbo_arduqbo
   src/qbo_arduqbo.cpp
   src/drivers/i2c_bus_driver.cpp
   src/controllers/battery_controller.cpp
-  # src/controllers/imu_controller.cpp
 )
 target_include_directories(qbo_arduqbo PUBLIC include)
 target_link_libraries(qbo_arduqbo
@@ -136,7 +155,7 @@ install(TARGETS
   qbo_serial
   qbo_dynamixel
   qbo_arduqbo
-  dynamixel_controller_lib
+  dynamixel_hardware_lib
   base_controller
   imu_controller
   lcd_controller

@@ -68,8 +68,6 @@ private:
     std::shared_ptr<rclcpp::Node>                diag_node_;
     std::shared_ptr<diagnostic_updater::Updater> diag_updater_;
 
-    // Conversion vitesse rad/s → Dynamixel units (AX12A)
-    int radPerSecToDxlSpeed(double rad_s);
     void   diagnosticCallback(diagnostic_updater::DiagnosticStatusWrapper & stat, int servo_index);
     int    angleToTicks(const Servo & servo, double rad);
     double ticksToAngle(const Servo & servo, int ticks);

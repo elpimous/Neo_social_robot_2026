@@ -67,6 +67,176 @@ qbo_dynamixel (main)
 
 ## Fonctionnement détaillé
 
+ImuController (imu_ctrl)
+
+Rôle : lecture IMU, calibration IMU.
+
+Paramètres
+
+    rate (double) : fréquence de publication.
+    topic (string) : base du topic IMU.
+
+Topics
+
+    Publie : <topic>/data (sensor_msgs/msg/Imu).
+    Publie : <topic>/is_calibrated (std_msgs/msg/Bool).
+
+Services
+
+    <topic>/calibrate (qbo_msgs/srv/CalibrateIMU).
+
+Diagnostics (IMU Status)
+
+    Criticité : ERROR si IMU incomplète, WARN si non calibrée, OK sinon.
+    Champs : présence gyro/accel, modèles et adresses I2C, IMU calibrated, Last calibration.
+
+Exemples
+
+ros2 topic echo /qbo_arduqbo/imu_ctrl/imu_state/data
+ros2 topic echo /qbo_arduqbo/imu_ctrl/imu_state/is_calibrated
+ros2 service call /qbo_arduqbo/imu_ctrl/imu_state/calibrate qbo_msgs/srv/CalibrateIMU "{}"
+
+BatteryController (battery_ctrl)
+
+Rôle : mesure tension et état batterie, estimation autonomie/puissance.
+
+Paramètres
+
+    error_battery_level (double) : seuil batterie vide.
+    warn_battery_level (double) : seuil batterie faible.
+    capacity_ah (double) : capacité batterie.
+    nominal_voltage (double) : tension nominale.
+    battery_type (string) : type de batterie.
+
+Topics
+
+    Aucun topic applicatif dédié (diagnostics uniquement).
+    Abonné à /diagnostics pour récupérer la puissance A608.
+
+Services
+
+    Aucun.
+
+Diagnostics (Battery Status)
+
+    Criticité : STALE si pas de communication QBoard3, WARN/ERROR selon seuils, OK sinon.
+    Champs : Voltage, Type, Nominal Voltage, Capacity, Status, Charge Mode, External Power, PC On, Boards On, Charge Mode Description, Estimated Runtime, Estimated Power, Estimated Extras.
+
+Exemples
+
+ros2 topic echo /diagnostics
+
+LcdController (lcd_ctrl)
+
+Rôle : affichage LCD (ligne commandée + infos diagnostics).
+
+Paramètres
+
+    rate (double) : fréquence d'update.
+    topic (string) : topic d'affichage LCD.
+
+Topics
+
+    Abonne : <topic> (qbo_msgs/msg/LCD).
+    Abonne : /diagnostics (pour afficher réseau, batterie, temperature CPU).
+
+Services
+
+    Aucun.
+
+Diagnostics (LCD Status)
+
+    Criticité : OK si LCD présent, ERROR sinon.
+    Champs : LCD Present, LCD Model, I2C Address.
+
+Exemples
+
+ros2 topic pub -1 /qbo_arduqbo/lcd_ctrl/cmd_lcd qbo_msgs/msg/LCD "{msg: 'Hello Q.bo'}"
+
+NoseController (nose_ctrl)
+
+Rôle : LED RGB du nez, test.
+
+Paramètres
+
+    rate (double) : fréquence de boucle.
+    topic (string) : topic couleur nez.
+
+Topics
+
+    Abonne : <topic> (qbo_msgs/msg/Nose).
+
+Services
+
+    <node>/test_leds (qbo_msgs/srv/TestLeds).
+
+Diagnostics (Nose Status)
+
+    Criticité : WARN si la derniere commande/test a echoue, OK sinon.
+    Champs : color_code, color_name.
+
+Exemples
+
+ros2 topic pub -1 /qbo_arduqbo/nose_ctrl/cmd_nose qbo_msgs/msg/Nose "{color: 4}"
+ros2 service call /qbo_arduqbo/nose_ctrl/test_leds qbo_msgs/srv/TestLeds "{}"
+
+MouthController (mouth_ctrl)
+
+Rôle : matrice LED 4x5, test.
+
+Paramètres
+
+    rate (double) : fréquence de boucle.
+    topic (string) : topic motif bouche.
+
+Topics
+
+    Abonne : <topic> (qbo_msgs/msg/Mouth).
+
+Services
+
+    <node>/test_leds (qbo_msgs/srv/TestLeds).
+
+Diagnostics (Mouth Status)
+
+    Criticité : WARN si le test LED a echoue, OK sinon.
+
+Exemples
+
+ros2 topic pub -1 /qbo_arduqbo/mouth_ctrl/cmd_mouth qbo_msgs/msg/Mouth "{mouth_image: [true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true]}"
+ros2 service call /qbo_arduqbo/mouth_ctrl/test_leds qbo_msgs/srv/TestLeds "{}"
+
+SensorController (sens_ctrl)
+
+Rôle : capteurs distance SRF10/VL53L1X (I2C) et Sharp IR (ADC).
+
+Paramètres
+
+    rate (double) : fréquence de boucle (default 15.0).
+    topic (string) : base des topics publies (default srf10_state).
+    sensors.<group>.<name>.type : srf10, VL53L1X, gp2d12, gp2d120, GP2Y0A21YK.
+    sensors.<group>.<name>.address : adresse I2C/ADC.
+    sensors.<group>.<name>.frame_id : frame du capteur.
+    sensors.<group>.<name>.topic : topic de publication (optionnel).
+    sensors.<group>.<name>.publish_if_obstacle : publier uniquement si obstacle.
+
+Topics
+
+    Publie : <base_topic>/<name> (sensor_msgs/msg/PointCloud) pour chaque capteur.
+
+Services
+
+    Aucun.
+
+Diagnostics (Sensors Status)
+
+    Criticité : WARN si aucun capteur configure ou si un capteur ne repond plus, OK sinon.
+    Champs : Missing SRF10, Missing ADC, SRF10 count, ADC count, Board configured.
+
+Exemples
+
+ros2 topic echo /qbo_arduqbo/sens_ctrl/distance_sensors_state/front_right_srf10
+
 ### Initialisation (`on_init`)
 
 1. Lecture des paramètres depuis le yaml (port, baud, protocol, joints...)

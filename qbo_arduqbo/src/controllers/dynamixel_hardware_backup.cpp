@@ -96,7 +96,7 @@ hardware_interface::CallbackReturn DynamixelHardware::on_init(const hardware_int
         s.torque_enabled = true;
 
         // -----  AJOUT: vitesse réduite pour centrage au démarrage du robot -----
-        int init_speed = radPerSecToDxlSpeed(0.5); // vitesse réduite en rad/s pour départ doux
+        int init_speed = radPerSecToDxlSpeed(0.1); // vitesse réduite 0.2 rad/s pour départ doux
         dxl_wb_.itemWrite(s.id, "Moving_Speed", init_speed);
 
         dxl_wb_.itemWrite(s.id, "Goal_Position", s.neutral); // position neutre
