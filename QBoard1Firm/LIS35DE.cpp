@@ -1,4 +1,3 @@
-// Accelerometer
 // Un accéléromètre, est un capteur qui mesure l’accélération linéaire – 
 // c’est-à-dire les variations de vitesse dans une direction donnée – sur un ou plusieurs axes.
 // Il peut détecter à la fois les accélérations dynamiques (mouvements) et l’accélération statique due à la gravité.

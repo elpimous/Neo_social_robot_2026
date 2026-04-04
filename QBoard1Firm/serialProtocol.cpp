@@ -52,12 +52,12 @@ uint8_t pearson(uint8_t *key, uint8_t len)
 
 SerialProtocol::SerialProtocol(arduBot::ArduBot *robot) : robot(robot),
   INPUT_FLAG(0xFF), OUTPUT_FLAG(0xFE), INPUT_ESCAPE(0xFD),
-  isInputEscaped_(false), isInputCorrect_(true)
+  isInputEscaped_(false), isInputCorrect_(true),
+  length_(0)  
 {
-  // vince : baud rate 115200 → 500000 (cohérent avec ArduBot.cpp)
-  // Réduit le temps de transmission de 4.3× → moins de jitter entre commandes
-  Serial.begin(500000);
-  Serial.flush();
+  // deja appele dans ardubot.cpp
+  //Serial.begin(500000);
+  //Serial.flush();
 }
 
 boolean SerialProtocol::procesaEntrada(byte* buf, byte length)
@@ -79,9 +79,6 @@ boolean SerialProtocol::procesaEntrada(byte* buf, byte length)
   return true;
 }
 
-byte length = 0;
-byte buf[128];
-
 void SerialProtocol::processSerial()
 {
   if (Serial.available() > 0)
@@ -92,16 +89,16 @@ void SerialProtocol::processSerial()
       incomingByte = byte(incoming);
     if (incomingByte == INPUT_FLAG)
     {
-      length = 0;
-      buf[length] = incomingByte;
-      length++;
+      length_ = 0;
+      buf_[length_] = incomingByte;
+      length_++;
       return;
     }
     else if (incomingByte == OUTPUT_FLAG)
     {
-      buf[length] = incomingByte;
-      length++;
-      if (procesaEntrada(buf, length))
+      buf_[length_] = incomingByte;
+      length_++;
+      if (procesaEntrada(buf_, length_))
       {
         processCommands();
         sendResponse();
@@ -110,7 +107,7 @@ void SerialProtocol::processSerial()
       {
         sendNack();
       }
-      length = 0;
+      length_ = 0;
       return;
     }
     if (isInputEscaped_)
@@ -123,13 +120,13 @@ void SerialProtocol::processSerial()
       isInputEscaped_ = true;
       return;
     }
-    if (length > 128)
+    if (length_ > 128)
     {
-      length = 0;
+      length_ = 0;
       return;
     }
-    buf[length] = incomingByte;
-    length++;
+    buf_[length_] = incomingByte;
+    length_++;
   }
 }
 
@@ -160,8 +157,8 @@ void SerialProtocol::processCommands()
       {
         command_.nOutputData = 3;
         command_.outputData[0] = robot->ir1data;
-        command_.outputData[0] = robot->ir2data;
-        command_.outputData[0] = robot->ir3data;
+        command_.outputData[1] = robot->ir2data;
+        command_.outputData[2] = robot->ir3data;
         robot->ir1data = 0;
         robot->ir2data = 0;
         robot->ir3data = 0;
@@ -262,7 +259,24 @@ void SerialProtocol::processCommands()
       else
       {
         command_.nOutputData = 0;
-        char msg[command_.nInputData + 1];
+
+        // -----------------------------------------------------------------------
+        // CORRECTION BUG (Mars 2026) : VLA (Variable Length Array) supprimé
+        //
+        // PROBLÈME ORIGINAL :
+        //   char msg[command_.nInputData + 1];
+        //   → VLA : taille calculée à l'exécution, non standard en C++
+        //   → Sur ATmega2560 : seulement ~8KB de RAM totale, pile partagée
+        //     avec tous les objets statiques et le heap.
+        //     Si nInputData est grand ou imprévisible, allocation pile variable
+        //     → stack overflow silencieux → corruption mémoire aléatoire.
+        //
+        // SOLUTION :
+        //   Buffer fixe de 129 octets (128 données + '\0').
+        //   inputData[] est déjà borné à 128 octets dans CCommand → taille
+        //   cohérente et garantie, zéro risque de débordement.
+        // -----------------------------------------------------------------------
+        char msg[128 + 1];
         for (int i = 0; i < command_.nInputData; i++)
           msg[i] = (char)command_.inputData[i];
         msg[command_.nInputData] = '\0';
@@ -358,7 +372,7 @@ void SerialProtocol::processCommands()
       else
       {
         command_.nOutputData = 12;
-        double xCoordinate, yCoordinate, angle;
+        float xCoordinate, yCoordinate, angle;
         robot->getSpacePosition(xCoordinate, yCoordinate, angle);
         byte* floatToBytes = (byte*)&xCoordinate;
         command_.outputData[0] = floatToBytes[0];
@@ -399,10 +413,10 @@ void SerialProtocol::processCommands()
       else
       {
         command_.nOutputData = 2 * command_.nInputData;
-        for (byte j = 0; j < command_.nOutputData; j++)
+        for (byte j = 0; j < command_.nInputData; j++)   // ← nInputData, pas nOutputData
         {
           unsigned int readedValue = 0;
-          if (command_.inputData[j] >= 0 && command_.inputData[j] < 16)
+          if (command_.inputData[j] < 16)               // ← byte toujours >= 0, condition simplifiée
             readedValue = robot->adcRead(command_.inputData[j]);
           byte* intToBytes = (byte*)(&readedValue);
           command_.outputData[2 * j]     = intToBytes[0];

@@ -26,7 +26,7 @@ void displayBatteryIcon(LCD03 &lcd, byte charg, float batV) {
         lcd.display();
         lcd.setCursor(15, 3);
         lcd.write(7);
-        batteryIconFrame = (batteryIconFrame + 1) % 5;
+        batteryIconFrame = (batteryIconFrame + 1) % 6;
         lcd.setCursor(17, 3);
         loadBatteryIcon(lcd, batteryIconFrame);
         lcd.write(0);
@@ -38,7 +38,7 @@ void displayBatteryIcon(LCD03 &lcd, byte charg, float batV) {
         loadBatteryIcon(lcd, 5);
         lcd.write(0);
     } else if (charg == 4) {
-        lcd.noDisplay();
+        lcd.display();
         lcd.setCursor(15, 3);
         lcd.print(" ");
         lcd.setCursor(17, 3);

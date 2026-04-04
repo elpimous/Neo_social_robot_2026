@@ -37,7 +37,14 @@
 #define MAX_FLOOR_DISTANCE_CM 36
 #define MIN_SENSOR_DISTANCE_FRONT_CM 20
 #define MIN_SENSOR_DISTANCE_BACK_CM 10
-#define FLOOR_DISTANCE_SENSOR_ARDUINO_PIN 8
+
+// Capteur distance sol (Sharp IR analogique) — broche analogique A8
+// Sur Arduino Mega : A8 = broche physique 62
+// ⚠️  Ne pas confondre avec MOTOR_1_PWM_ARDUINO_PIN qui vaut aussi 8
+//     mais désigne la broche DIGITALE 8 (PWM Timer4).
+//     analogRead(8) == analogRead(A8) sur AVR, mais A8 est explicite.
+#define FLOOR_DISTANCE_SENSOR_ARDUINO_PIN A8
+
 #define ENABLE_RIGHT_LASER_PIN PB3
 #define AMPLI_ADDR 0x4B
 #define LCD_I2C_ADDRESS 0xC6
@@ -165,11 +172,31 @@ namespace arduBot
       int16_t roll;
       int16_t pitch;
 
-      ArduBot(double wheelRadious = 0.102, double wheelDistance = 0.2736, int encoderResolution = 1560);
+      ArduBot(double wheelRadious = 0.102, double wheelDistance = 0.2736, int encoderResolution = 1440); //1560
       void begin(double spinLoopPeriodS = 0.005, double kp = 0.0, double ki = 0.0, double kd = 0.0);
 
-      inline void getSpacePosition(double& x, double& y, double& angle) {
-        x = xCoordinate; y = yCoordinate; angle = thetaCoordinate;
+      // -----------------------------------------------------------------------
+      // getSpacePosition() — lecture de la position odométrique
+      //
+      // Coordonnées internes (xCoordinate, yCoordinate, thetaCoordinate) :
+      //   → stockées en double pour la précision maximale des calculs
+      //      odométriques (intégration cos/sin sur des milliers de cycles)
+      //
+      // Retour en float :
+      //   → la sérialisation série (GET_ODOMETRY) envoie 4 octets par valeur
+      //   → double = 8 octets sur ARM/x86, mais sur AVR double = float = 4 octets
+      //   → utiliser float ici rend le code portable et explicitement correct
+      //   → précision float (~7 chiffres) largement suffisante pour ROS :
+      //      position en mètres avec 0.1mm de résolution sur ±100m
+      //
+      // ⚠️  CORRECTION BUG #11 (Mars 2026) :
+      //     L'ancienne version déclarait double xCoordinate dans processCommands()
+      //     puis sérialisait 4 octets → silencieusement correct sur AVR (double=float)
+      //     mais incorrect sur toute autre architecture (ex. portage Jetson).
+      //     Le cast (float) ici rend la troncature explicite et volontaire.
+      // -----------------------------------------------------------------------
+      inline void getSpacePosition(float& x, float& y, float& angle) {
+        x = (float)xCoordinate; y = (float)yCoordinate; angle = (float)thetaCoordinate;
       };
 
       void filterGyro(float &gx, float &gy, float &gz);

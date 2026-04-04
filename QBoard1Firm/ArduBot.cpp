@@ -76,14 +76,8 @@ ArduBot::ArduBot(double wheelRadius, double wheelDistance, int encoderResolution
   DDRJ &= ~(1 << MOTOR_1_HALL_A_PIN) & ~(1 << MOTOR_1_HALL_B_PIN) & ~(1 << MOTOR_2_HALL_A_PIN) & ~(1 << MOTOR_2_HALL_B_PIN);
   PORTJ |= (1 << MOTOR_1_HALL_A_PIN) | (1 << MOTOR_1_HALL_B_PIN) | (1 << MOTOR_2_HALL_A_PIN) | (1 << MOTOR_2_HALL_B_PIN);
   PCICR |= (1 << PCIE1);
-  DDRE &= ~(1 << 6) & ~(1 << 7);
-  DDRD &= ~(1 << 2);
-  PORTE |= (1 << 6) | (1 << 7);
-  PORTD |= (1 << 2);
-  EICRA &= ~(1 << ISC20) & ~(1 << ISC30);
-  EICRA |= (1 << ISC21) | (1 << ISC31);
-  EICRB &= ~(1 << ISC60) & ~(1 << ISC70);
-  EICRB |= (1 << ISC61) | (1 << ISC71);
+
+  // ✅ GARDER — initialisation variables
   ArduBot::par_motores.initializePhisicalVariables(encoderResolution, wheelDistance, wheelRadius);
   xCoordinate = 0; yCoordinate = 0; thetaCoordinate = 0; alert_stop = 0;
 }
@@ -118,9 +112,10 @@ void ArduBot::begin(double spinLoopPeriodS, double kp, double ki, double kd)
     Serial.println("LCD HS...");
   }
 
-  L3G4200D gyro(0x69);
+  // On upprime la variable locale car on utlilse directement le membre
+  // L3G4200D gyro(0x69);
   gyroState = gyro.begin(2000);
-  LIS35DE accel(0x1E);
+  // LIS35DE accel(0x1E);
   accelerometerState = accelerometer.begin();
   initLasers();
   lcd.home(); lcd.clear(); lcd.print("Waiting for Qbo_PC");
@@ -130,17 +125,44 @@ void ArduBot::begin(double spinLoopPeriodS, double kp, double ki, double kd)
   ampliState = initAmpli(AMPLI_ADDR);
 
   oldPort = PINJ & ((1 << MOTOR_1_HALL_A_PIN) | (1 << MOTOR_1_HALL_B_PIN) | (1 << MOTOR_2_HALL_A_PIN) | (1 << MOTOR_2_HALL_B_PIN));
-  leftMotorHallA  = ((oldPort & (1 << MOTOR_1_HALL_A_PIN)) != 0);
-  leftMotorHallB  = ((oldPort & (1 << MOTOR_1_HALL_B_PIN)) != 0);
-  rightMotorHallA = ((oldPort & (1 << MOTOR_2_HALL_A_PIN)) != 0);
-  rightMotorHallB = ((oldPort & (1 << MOTOR_2_HALL_B_PIN)) != 0);
+
+  //**Impact :** Au démarrage, la première transition Hall peut générer un pulse fantôme
+  // dans le mauvais sens, introduisant une erreur initiale d'odométrie.
+  leftMotorHallA  = ((oldPort & (1 << MOTOR_2_HALL_A_PIN)) != 0);  // MOTOR_2 = gauche, cohérent avec l' ISR
+  leftMotorHallB  = ((oldPort & (1 << MOTOR_2_HALL_B_PIN)) != 0);
+  rightMotorHallA = ((oldPort & (1 << MOTOR_1_HALL_A_PIN)) != 0);  // MOTOR_1 = droite
+  rightMotorHallB = ((oldPort & (1 << MOTOR_1_HALL_B_PIN)) != 0);
+
   ArduBot::spinLoopPeriodMs = long(spinLoopPeriodS * 1000);
   ArduBot::par_motores.initializePIDVariables(kp, kd, ki, spinLoopPeriodS);
   spinTime = srf10time = millis();
   TCCR4B = (TCCR4B & 0b11111000) | 0x01;
   PCMSK1 = 0 | (1 << PCINT11) | (1 << PCINT12) | (1 << PCINT13) | (1 << PCINT14);
-  EIMSK |= (1 << INT2) | (1 << INT6) | (1 << INT7) | (1 << INT3);
+  EIMSK |= (1 << INT2) | (1 << INT6) | (1 << INT7);
   Serial.println("Initialisation IR...");
+
+  // -----------------------------------------------------------------------
+  // CONFIGURATION INTERRUPTIONS IR — INT2 (IR3/PD2), INT6 (IR1/PE6), INT7 (IR2/PE7)
+  //
+  // ⚠️  CORRECTION BUG (Mars 2026) : double configuration supprimée.
+  //     L'ancienne version configurait ces mêmes registres une première
+  //     fois dans le constructeur ArduBot(), puis une seconde fois ici.
+  //     → Redondance trompeuse : on ne sait plus quelle version fait foi.
+  //     → Risque : si on modifie un bloc sans modifier l'autre, les deux
+  //       divergent silencieusement et le comportement devient imprévisible.
+  //
+  // RÈGLE : le constructeur n'initialise QUE les variables C++.
+  //         Toute configuration hardware (DDR, PORT, EICRA, EIMSK...)
+  //         appartient exclusivement à begin(), appelé explicitement
+  //         par l'utilisateur quand le hardware est prêt.
+  //
+  // Broches :
+  //   PE6 (Arduino pin 5)  → IR1 → INT6
+  //   PE7 (Arduino pin 6)  → IR2 → INT7
+  //   PD2 (Arduino pin 19) → IR3 → INT2
+  //
+  // Mode déclenchement : flanc descendant (ISC_1=1, ISC_0=0)
+  // -----------------------------------------------------------------------
   DDRE &= ~((1 << IR1_BIT) | (1 << IR2_BIT));
   DDRD &= ~(1 << IR3_BIT);
   PORTE |= (1 << IR1_BIT) | (1 << IR2_BIT);
@@ -153,7 +175,11 @@ void ArduBot::begin(double spinLoopPeriodS, double kp, double ki, double kd)
   IrReceiver.begin(IR_RECEIVE_PIN);
 }
 
-long old_time = millis();
+/* **Sur ATmega2560, le timer0 (base de millis()) n'est configuré qu'au début de `main()`,
+APRÈS les initialisations statiques.** `millis()` retourne 0 dans ce contexte.
+`old_time` est aussi non utilisé dans le code — la variable est morte.
+// long old_time = millis(); // ← appelé AVANT setup(), timers non démarrés
+*/
 long stopTime = 1000;
 long speedComandTime = 0;
 
@@ -176,7 +202,7 @@ void ArduBot::estimatePosition(float loopPeriodSeconds)
 
   float gyroAngularMovement = ((float)gyroZ) * 0.0174533f * loopPeriodSeconds;
 
-  const float alpha = 0.98f;
+  const float alpha = 0.95f; // 0.98f 
   float angularMovement = alpha * gyroAngularMovement + (1 - alpha) * odometryAngularMovement;
 
   // vince : cos/sin précalculés une seule fois → économise ~400µs/cycle (8% budget 5ms)
@@ -227,13 +253,26 @@ void ArduBot::setSpeeds(double linear_speed, double angular_speed)
   if (abs(roll) > 9 || abs(pitch) > 9) { linear_speed = 0.0; angular_speed = 0.0; }
   if (LeftDist  < 20 && LeftDist  != 0 && linear_speed > 0) linear_speed = 0.0;
   if (RightDist < 20 && RightDist != 0 && linear_speed > 0) linear_speed = 0.0;
-  if (BackRightDist < 10 && BackRightDist != 0 && linear_speed > 0) linear_speed = 0.0;
-  if (BackLeftDist  < 10 && BackLeftDist  != 0 && linear_speed > 0) linear_speed = 0.0;
+
+  // -----------------------------------------------------------------------
+  // SÉCURITÉ ARRIÈRE — SRF10 ultrason arrière gauche (115) et droit (114)
+  //
+  // Convention de signe : linear_speed > 0 = avance, linear_speed < 0 = recul
+  //
+  // ⚠️  CORRECTION BUG (Mars 2026) : signe était > 0 → logique inversée
+  //     Un obstacle ARRIÈRE doit bloquer le RECUL (< 0), pas l'avance.
+  //     L'ancienne version empêchait d'avancer quand un obstacle était
+  //     derrière, et laissait reculer dedans sans protection.
+  //
+  // Seuil : 10 cm (BackDist != 0 exclut les lectures invalides du SRF10)
+  // -----------------------------------------------------------------------
+  if (BackRightDist < 10 && BackRightDist != 0 && linear_speed < 0) linear_speed = 0.0;
+  if (BackLeftDist  < 10 && BackLeftDist  != 0 && linear_speed < 0) linear_speed = 0.0;
   currentLinearSpeed  = linear_speed;
   currentAngularSpeed = angular_speed;
   ArduBot::par_motores.desiredLinearSpeed  = linear_speed;
   ArduBot::par_motores.desiredAngularSpeed = angular_speed;
-  ArduBot::par_motores.transformSpeeds2Pulses();
+  // ArduBot::par_motores.transformSpeeds2Pulses();
   speedComandTime = millis();
 }
 
@@ -307,7 +346,9 @@ void ArduBot::setSrfsRegisters()
 
 void ArduBot::filterGyro(float &gx, float &gy, float &gz)
 {
-  static float alpha = 0.92;
+  static float alpha = 0.7; // 0.92 // τ ≈ 59ms de lag à 5ms/cycle
+  // À 0.92, la réponse du gyro est très lente. Si Néo tourne vite, 
+  // estimatePosition() va sous-estimer gyroAngularMovement pendant ~60ms
   static float gx_prev = 0, gy_prev = 0, gz_prev = 0;
   gx = alpha * gx_prev + (1 - alpha) * gx;
   gy = alpha * gy_prev + (1 - alpha) * gy;
@@ -446,7 +487,7 @@ void ArduBot::spinOnce()
 
   if (now - batteryTime > 1000)
   {
-    lcd.setCursor(0, 2); lcd.print("                   ");
+    lcd.setCursor(0, 2); lcd.print("                    "); // vince ajout 1 caractere manquant = 20
     lcd.setCursor(0, 2);
     lcd.print("X"); lcd.print((int)(xCoordinate * 100));
     lcd.setCursor(5, 2);

@@ -61,6 +61,8 @@ namespace arduBotSerial
   };
   class SerialProtocol {
     private:
+      byte buf_[128];
+      byte length_;
       const byte INPUT_FLAG;
       const byte OUTPUT_FLAG;
       const byte INPUT_ESCAPE;
