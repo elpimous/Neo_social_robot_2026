@@ -204,6 +204,7 @@ Diagnostics (Mouth Status)
 Exemples
 
 ros2 topic pub -1 /qbo_arduqbo/mouth_ctrl/cmd_mouth qbo_msgs/msg/Mouth "{mouth_image: [true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true]}"
+
 ros2 service call /qbo_arduqbo/mouth_ctrl/test_leds qbo_msgs/srv/TestLeds "{}"
 
 SensorController (sens_ctrl)
