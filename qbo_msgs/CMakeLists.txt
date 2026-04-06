@@ -13,23 +13,16 @@ find_package(sensor_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/ListenResult.msg"
   "msg/BatteryLevel.msg"
   "msg/LCD.msg"
   "msg/Nose.msg"
   "msg/Mouth.msg"
-  "msg/MicReport.msg"
-  "msg/FacePosAndDist.msg"
-  "srv/Text2Speach.srv"
   "srv/TorqueEnable.srv"
   "srv/SetOdometry.srv"
   "srv/CalibrateIMU.srv"
   "srv/TestLeds.srv"
   "srv/SetMouthAnimation.srv"
-  "srv/RecognizeFace.srv"
-  "srv/GetName.srv"
-  "srv/Train.srv"
-  "srv/LearnFaces.srv"
+  
   DEPENDENCIES std_msgs builtin_interfaces sensor_msgs
 )
 

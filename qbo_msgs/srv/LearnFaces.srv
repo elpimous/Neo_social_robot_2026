@@ -1,5 +1,0 @@
-
-string person_name      #Name of the object to be learned
-sensor_msgs/Image face  # Image of the face to be learned
----
-bool learned            #Return true if the object was learned. If false, no new object was learned
