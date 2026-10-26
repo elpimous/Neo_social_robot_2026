@@ -2,6 +2,7 @@
 
 # inversion 180° image
 # charge CPU = 7.9 %
+# Auteur : Vincent FOUCAULT
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -20,10 +21,10 @@ class ImageRotator(Node):
         cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         rotated_image = cv2.rotate(cv_image, cv2.ROTATE_180)
         rotated_msg = self.bridge.cv2_to_imgmsg(rotated_image, "bgr8")
+        rotated_msg.header = msg.header  # conserve horodatage et frame_id
         self.publisher.publish(rotated_msg)
 
 def main():
     rclpy.init()
     rotator = ImageRotator()
     rclpy.spin(rotator)
-
