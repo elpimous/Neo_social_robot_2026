@@ -271,10 +271,6 @@ int main(int argc, char **argv)
                     js_msg.velocity.push_back(s.velocity);
                     js_msg.effort.push_back(s.effort);
 
-                    RCLCPP_INFO(node->get_logger(),
-                        "Motor %s (ID %d): pos=%.3f rad  temp=%.0f°C  torque=%s",
-                        s.name.c_str(), s.id, s.position, s.temperature,
-                        s.torque_enabled ? "ON" : "OFF");
                 }
 
                 joint_state_pub->publish(js_msg);
