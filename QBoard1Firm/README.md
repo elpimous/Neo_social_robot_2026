@@ -71,3 +71,29 @@ lcd.createChar() = ~3-5ms I2C bloquant inutile.
 | ODO_ANGULAR | -1 multiplication/cycle | FAIBLE |
 | thetaGyroOnly | -50µs/cycle | FAIBLE |
 | LCD createChar | -5ms/s I2C inutile | MOYEN |
+
+---
+
+## Compiler et flasher depuis la Jetson (arduino-cli)
+
+⚠️ La QBoard1 embarque un **ATmega1280** (pas un 2560) : il faut `cpu=atmega1280`,
+sinon l'upload échoue avec `stk500v2_getsync() failed`.
+
+```bash
+# installation (une fois)
+curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=~/.local/bin sh
+arduino-cli core install arduino:avr
+arduino-cli lib install "VL53L1X" "IRremote" "LCD03"
+
+# flash (ROS arrêté pour libérer le port)
+sudo systemctl stop qbo_bringup.timer qbo_bringup.service
+arduino-cli compile --fqbn arduino:avr:mega:cpu=atmega1280 .
+arduino-cli upload  --fqbn arduino:avr:mega:cpu=atmega1280 -p /dev/ttyQboard1 .
+sudo systemctl start qbo_bringup.timer qbo_bringup.service
+```
+
+## Capteurs de distance (oct. 2026)
+
+Néo n'a que **2 SRF10 à l'avant** (I2C 0x73 gauche, 0x75 droit) : pas de lasers VL53L1X,
+pas de capteurs arrière. `GET_ALL_SENSORS` renvoie LeftDist sous l'ID 112 et RightDist
+sous l'ID 113 (9999 = rien à moins de 60 cm) ; l'avance est bloquée sous 20 cm.
