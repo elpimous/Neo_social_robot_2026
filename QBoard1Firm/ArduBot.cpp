@@ -123,6 +123,9 @@ void ArduBot::begin(double spinLoopPeriodS, double kp, double ki, double kd)
   srfFrontRightAddr = detectI2CDevice(SRF_FRONT_RIGHT_ADDR) ? SRF_FRONT_RIGHT_ADDR
                     : (detectI2CDevice(SRF_FRONT_RIGHT_ADDR_ALT) ? SRF_FRONT_RIGHT_ADDR_ALT
                                                                 : SRF_FRONT_RIGHT_ADDR);
+  // Portée et gain des deux SRF10 (registres volatils : à refaire à chaque démarrage)
+  changeSrfDistance(srfFrontLeftAddr,  SRF_RANGE_REG); changeSrfGain(srfFrontLeftAddr,  SRF_GAIN_REG);
+  changeSrfDistance(srfFrontRightAddr, SRF_RANGE_REG); changeSrfGain(srfFrontRightAddr, SRF_GAIN_REG);
   updateSrfRange(srfFrontLeftAddr);   // premier tir : une mesure sera prête au premier cycle
   lcd.home(); lcd.clear(); lcd.print("Waiting for Qbo_PC");
 
