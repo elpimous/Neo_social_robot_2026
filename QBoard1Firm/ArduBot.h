@@ -53,8 +53,10 @@
 #define SRF_FRONT_LEFT_ADDR       0x73
 #define SRF_FRONT_RIGHT_ADDR      0x75
 #define SRF_FRONT_RIGHT_ADDR_ALT  0x72
-// SRF10 avant droit (0x75 / 234) défectueux (écho fixe ~10 cm, constaté le 26/10/2026).
-// 0 = ignoré (RightDist = 9999, pas de blocage), 1 = actif. Remettre à 1 après remplacement.
+// Activation des SRF10 avant : 0 = ignoré (distance = 9999, aucun blocage), 1 = actif.
+// 26/10/2026 : les deux sont désactivés (droit 0x75/234 défectueux : écho fixe ~10 cm ;
+// mise au point des sonars suspendue). Remettre à 1 pour les réactiver.
+#define SRF_FRONT_LEFT_ENABLED    0
 #define SRF_FRONT_RIGHT_ENABLED   0
 #define AMPLI_ADDR 0x4B
 #define LCD_I2C_ADDRESS 0xC6

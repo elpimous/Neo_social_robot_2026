@@ -128,7 +128,11 @@ void ArduBot::begin(double spinLoopPeriodS, double kp, double ki, double kd)
   Serial.print("SRF10 avant gauche : 0x"); Serial.println(srfFrontLeftAddr, HEX);
   Serial.print("SRF10 avant droit  : 0x"); Serial.println(srfFrontRightAddr, HEX);
 
+#if SRF_FRONT_LEFT_ENABLED
   updateSrfRange(srfFrontLeftAddr);   // premier tir : une mesure sera prête au premier cycle
+#elif SRF_FRONT_RIGHT_ENABLED
+  updateSrfRange(srfFrontRightAddr);
+#endif
   lcd.home(); lcd.clear(); lcd.print("Waiting for Qbo_PC");
 
   byte value, stat;
@@ -463,13 +467,16 @@ void ArduBot::spinOnce()
       // Tirs alternés toutes les 130 ms : chaque SRF10 a 130 ms pour finir sa mesure (~65 ms)
       // et les deux ne tirent jamais en même temps (pas d'écho croisé).
       // Ordre : on lit le capteur qui a tiré au cycle précédent, puis on fait tirer l'autre.
-#if SRF_FRONT_RIGHT_ENABLED
+#if SRF_FRONT_LEFT_ENABLED && SRF_FRONT_RIGHT_ENABLED
       if (index_front == 0) { LeftDist  = getSrfRange(srfFrontLeftAddr);  updateSrfRange(srfFrontRightAddr); index_front = 1; }
       else                  { RightDist = getSrfRange(srfFrontRightAddr); updateSrfRange(srfFrontLeftAddr);  index_front = 0; }
+#elif SRF_FRONT_LEFT_ENABLED
+      LeftDist  = getSrfRange(srfFrontLeftAddr);  updateSrfRange(srfFrontLeftAddr);  RightDist = 9999;
+#elif SRF_FRONT_RIGHT_ENABLED
+      RightDist = getSrfRange(srfFrontRightAddr); updateSrfRange(srfFrontRightAddr); LeftDist  = 9999;
 #else
-      // SRF10 droit désactivé : seul le gauche mesure, à chaque cycle
-      LeftDist  = getSrfRange(srfFrontLeftAddr);
-      updateSrfRange(srfFrontLeftAddr);
+      // Les deux SRF10 désactivés : aucune mesure, aucun blocage par les sonars
+      LeftDist  = 9999;
       RightDist = 9999;
 #endif
 
