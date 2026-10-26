@@ -46,6 +46,13 @@
 #define FLOOR_DISTANCE_SENSOR_ARDUINO_PIN A8
 
 #define ENABLE_RIGHT_LASER_PIN PB3
+
+// vince (oct. 2026) : Néo n'a pas de lasers VL53L1X, seulement 2 SRF10 à l'avant.
+// Adresses I2C 7 bits (Wire) : gauche 0x73 (0xE6 en 8 bits), droit 0x75 (0xEA en 8 bits).
+// Si rien ne répond en 0x75 au démarrage, le firmware essaie 0x72 (ancienne adresse lue).
+#define SRF_FRONT_LEFT_ADDR       0x73
+#define SRF_FRONT_RIGHT_ADDR      0x75
+#define SRF_FRONT_RIGHT_ADDR_ALT  0x72
 #define AMPLI_ADDR 0x4B
 #define LCD_I2C_ADDRESS 0xC6
 #define IR1_BIT PE6
@@ -113,6 +120,8 @@ namespace arduBot
 
       byte NUM_SRFs;
       int SRFs_ADRESS[16];
+      int srfFrontLeftAddr  = SRF_FRONT_LEFT_ADDR;
+      int srfFrontRightAddr = SRF_FRONT_RIGHT_ADDR;
       byte NUM_SRFs_FRONT;
       int SRFs_FRONT[4];
       bool SRFs_FRONT_CRASH_FLAGS[16];

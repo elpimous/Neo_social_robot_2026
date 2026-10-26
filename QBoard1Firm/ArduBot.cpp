@@ -117,7 +117,13 @@ void ArduBot::begin(double spinLoopPeriodS, double kp, double ki, double kd)
   gyroState = gyro.begin(2000);
   // LIS35DE accel(0x1E);
   accelerometerState = accelerometer.begin();
-  initLasers();
+  // vince (oct. 2026) : lasers VL53L1X absents sur Néo → initLasers() n'est plus appelé.
+  // Détection de l'adresse du SRF10 avant droit (0x75 attendu, 0x72 en repli).
+  srfFrontLeftAddr  = SRF_FRONT_LEFT_ADDR;
+  srfFrontRightAddr = detectI2CDevice(SRF_FRONT_RIGHT_ADDR) ? SRF_FRONT_RIGHT_ADDR
+                    : (detectI2CDevice(SRF_FRONT_RIGHT_ADDR_ALT) ? SRF_FRONT_RIGHT_ADDR_ALT
+                                                                : SRF_FRONT_RIGHT_ADDR);
+  updateSrfRange(srfFrontLeftAddr);   // premier tir : une mesure sera prête au premier cycle
   lcd.home(); lcd.clear(); lcd.print("Waiting for Qbo_PC");
 
   byte value, stat;
@@ -255,7 +261,8 @@ void ArduBot::setSpeeds(double linear_speed, double angular_speed)
   if (RightDist < 20 && RightDist != 0 && linear_speed > 0) linear_speed = 0.0;
 
   // -----------------------------------------------------------------------
-  // SÉCURITÉ ARRIÈRE — SRF10 ultrason arrière gauche (115) et droit (114)
+  // SÉCURITÉ ARRIÈRE — inactive sur Néo (aucun capteur arrière, BackLeftDist/BackRightDist = 0)
+  // Anciennement : SRF10 arrière gauche (115) et droit (114)
   //
   // Convention de signe : linear_speed > 0 = avance, linear_speed < 0 = recul
   //
@@ -440,26 +447,22 @@ void ArduBot::spinOnce()
   if (now - srf10time > 130)
   {
     srf10time += 130;
-    LaserL.read(false);
-    LaserR.read(false);
     MiddleDist = getFloorDistance();
 
     if (abs(ArduBot::par_motores.actualLeftWheelPulses) > 0 ||
         abs(ArduBot::par_motores.actualRightWheelPulses) > 0 ||
         isSrfUpdateContinuous)
     {
-      if (LaserL.ranging_data.range_status == 0 && LaserL.ranging_data.range_mm > 0)
-        LeftDist = LaserL.ranging_data.range_mm / 10;
-      else
-        LeftDist = 0;
+      // vince (oct. 2026) : SRF10 avant gauche/droit → LeftDist/RightDist (cm, 9999 = rien < 60 cm)
+      // Tirs alternés toutes les 130 ms : chaque SRF10 a 130 ms pour finir sa mesure (~65 ms)
+      // et les deux ne tirent jamais en même temps (pas d'écho croisé).
+      // Ordre : on lit le capteur qui a tiré au cycle précédent, puis on fait tirer l'autre.
+      if (index_front == 0) { LeftDist  = getSrfRange(srfFrontLeftAddr);  updateSrfRange(srfFrontRightAddr); index_front = 1; }
+      else                  { RightDist = getSrfRange(srfFrontRightAddr); updateSrfRange(srfFrontLeftAddr);  index_front = 0; }
 
-      if (LaserR.ranging_data.range_status == 0 && LaserR.ranging_data.range_mm > 0)
-        RightDist = LaserR.ranging_data.range_mm / 10;
-      else
-        RightDist = 0;
-
-      if (index_back == 0) { BackLeftDist  = getSrfRange(115); updateSrfRange(115); index_back = 1; }
-      else                 { BackRightDist = getSrfRange(114); updateSrfRange(114); index_back = 0; }
+      // Pas de capteur arrière sur Néo : 0 = "pas de mesure" (ignoré par setSpeeds)
+      BackLeftDist  = 0;
+      BackRightDist = 0;
 
       if (IrReceiver.decode()) {
         uint32_t code = IrReceiver.decodedIRData.decodedRawData;

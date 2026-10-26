@@ -68,13 +68,19 @@ qbo_arduqbo:
     rate: 5.0
     topic: "sens_ctrl/distance_sensors_state"
 
+    # vince : "address" = ID renvoyé par GET_ALL_SENSORS du firmware QBoard1 (pas l'adresse I2C)
+    #   112 = LeftDist  = SRF10 avant gauche (I2C 0x73 / 0xE6)
+    #   113 = RightDist = SRF10 avant droit  (I2C 0x75 / 0xEA, repli 0x72)
+    #   (firmware oct. 2026 : plus de lasers VL53L1X, plus de capteurs arrière)
+    #   9999 cm (99.99 m) = rien à moins de 60 cm
+
     sensors.front.front_left_srf10.type: "srf10"
-    sensors.front.front_left_srf10.address: 230
+    sensors.front.front_left_srf10.address: 112
     sensors.front.front_left_srf10.frame_id: "front_left_addon"
     sensors.front.front_left_srf10.publish_if_obstacle: false
 
     sensors.front.front_right_srf10.type: "srf10"
-    sensors.front.front_right_srf10.address: 234
+    sensors.front.front_right_srf10.address: 113
     sensors.front.front_right_srf10.frame_id: "front_right_addon"
     sensors.front.front_right_srf10.publish_if_obstacle: false
 
