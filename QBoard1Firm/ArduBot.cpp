@@ -128,9 +128,6 @@ void ArduBot::begin(double spinLoopPeriodS, double kp, double ki, double kd)
   Serial.print("SRF10 avant gauche : 0x"); Serial.println(srfFrontLeftAddr, HEX);
   Serial.print("SRF10 avant droit  : 0x"); Serial.println(srfFrontRightAddr, HEX);
 
-  // Portée et gain des deux SRF10 (registres volatils : à refaire à chaque démarrage)
-  changeSrfDistance(srfFrontLeftAddr,  SRF_RANGE_REG); changeSrfGain(srfFrontLeftAddr,  SRF_GAIN_REG);
-  changeSrfDistance(srfFrontRightAddr, SRF_RANGE_REG); changeSrfGain(srfFrontRightAddr, SRF_GAIN_REG);
   updateSrfRange(srfFrontLeftAddr);   // premier tir : une mesure sera prête au premier cycle
   lcd.home(); lcd.clear(); lcd.print("Waiting for Qbo_PC");
 
@@ -309,7 +306,8 @@ unsigned int ArduBot::getSrfRange(int address)
   int highByte = Wire.read();
   int lowByte  = Wire.read();
   unsigned int range = (highByte << 8) + lowByte;
-  if (range >= 60) return 9999;
+  // vince (oct. 2026) : 0 = aucun écho reçu → même code que "rien < 60 cm"
+  if (range == 0 || range >= 60) return 9999;
   return range;
 }
 
@@ -465,8 +463,15 @@ void ArduBot::spinOnce()
       // Tirs alternés toutes les 130 ms : chaque SRF10 a 130 ms pour finir sa mesure (~65 ms)
       // et les deux ne tirent jamais en même temps (pas d'écho croisé).
       // Ordre : on lit le capteur qui a tiré au cycle précédent, puis on fait tirer l'autre.
+#if SRF_FRONT_RIGHT_ENABLED
       if (index_front == 0) { LeftDist  = getSrfRange(srfFrontLeftAddr);  updateSrfRange(srfFrontRightAddr); index_front = 1; }
       else                  { RightDist = getSrfRange(srfFrontRightAddr); updateSrfRange(srfFrontLeftAddr);  index_front = 0; }
+#else
+      // SRF10 droit désactivé : seul le gauche mesure, à chaque cycle
+      LeftDist  = getSrfRange(srfFrontLeftAddr);
+      updateSrfRange(srfFrontLeftAddr);
+      RightDist = 9999;
+#endif
 
       // Pas de capteur arrière sur Néo : 0 = "pas de mesure" (ignoré par setSpeeds)
       BackLeftDist  = 0;

@@ -53,11 +53,9 @@
 #define SRF_FRONT_LEFT_ADDR       0x73
 #define SRF_FRONT_RIGHT_ADDR      0x75
 #define SRF_FRONT_RIGHT_ADDR_ALT  0x72
-// Réglages SRF10 appliqués au démarrage (valeurs prévues à l'origine dans setSrfsRegisters) :
-//   portée = (24 + 1) × 43 mm ≈ 1,07 m (mesure plus courte, moins d'échos lointains)
-//   gain analogique 6 / 16 (par défaut 16 = max, sensible aux échos parasites proches)
-#define SRF_RANGE_REG  24
-#define SRF_GAIN_REG   6
+// SRF10 avant droit (0x75 / 234) défectueux (écho fixe ~10 cm, constaté le 26/10/2026).
+// 0 = ignoré (RightDist = 9999, pas de blocage), 1 = actif. Remettre à 1 après remplacement.
+#define SRF_FRONT_RIGHT_ENABLED   0
 #define AMPLI_ADDR 0x4B
 #define LCD_I2C_ADDRESS 0xC6
 #define IR1_BIT PE6
