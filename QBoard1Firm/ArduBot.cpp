@@ -123,6 +123,11 @@ void ArduBot::begin(double spinLoopPeriodS, double kp, double ki, double kd)
   srfFrontRightAddr = detectI2CDevice(SRF_FRONT_RIGHT_ADDR) ? SRF_FRONT_RIGHT_ADDR
                     : (detectI2CDevice(SRF_FRONT_RIGHT_ADDR_ALT) ? SRF_FRONT_RIGHT_ADDR_ALT
                                                                 : SRF_FRONT_RIGHT_ADDR);
+  // Diagnostic : liste des périphériques I2C et adresses SRF10 retenues (visible avec arduino-cli monitor, ROS arrêté)
+  scanI2C();
+  Serial.print("SRF10 avant gauche : 0x"); Serial.println(srfFrontLeftAddr, HEX);
+  Serial.print("SRF10 avant droit  : 0x"); Serial.println(srfFrontRightAddr, HEX);
+
   // Portée et gain des deux SRF10 (registres volatils : à refaire à chaque démarrage)
   changeSrfDistance(srfFrontLeftAddr,  SRF_RANGE_REG); changeSrfGain(srfFrontLeftAddr,  SRF_GAIN_REG);
   changeSrfDistance(srfFrontRightAddr, SRF_RANGE_REG); changeSrfGain(srfFrontRightAddr, SRF_GAIN_REG);
