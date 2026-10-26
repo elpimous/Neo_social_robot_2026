@@ -1,0 +1,19 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  qbo_tts — qbo_tts_params.yaml
+#  Paramètres du node TTS (sherpa-onnx VITS « axel ») — robot Néo
+#  Author : Vincent FOUCAULT — Octobre 2026
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Les chemins du modèle (model_path, tokens_path, espeak_data_dir) sont
+#  calculés par le launch à partir du dossier share/qbo_tts/models installé.
+#  speed, sid et volume_gain sont modifiables à chaud :
+#    ros2 param set /qbo_tts_node volume_gain 2.5
+# ═══════════════════════════════════════════════════════════════════════════════
+
+qbo_tts_node:
+  ros__parameters:
+    provider:     "cuda"               # cuda | cpu
+    num_threads:  3                    # threads ONNX Runtime
+    sid:          0                    # speaker id (modèle mono-locuteur)
+    speed:        1.0                  # 0.8 = plus lent, 1.2 = plus rapide
+    volume_gain:  2.0                  # amplification de sortie
+    audio_device: "USB Audio Device"   # sous-chaîne du nom PortAudio (carte C-Media)

@@ -34,4 +34,9 @@ install(DIRECTORY models/
   DESTINATION share/${PROJECT_NAME}/models
 )
 
+# Install launch + config
+install(DIRECTORY launch config
+  DESTINATION share/${PROJECT_NAME}
+)
+
 ament_package()
