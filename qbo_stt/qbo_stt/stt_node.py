@@ -1,18 +1,62 @@
 #!/usr/bin/env python3
 """
-╔═════════════════════════════════════════════════╗
-║   qbo_stt — Speech-To-Text Node — Robot Néo     ║
-║   NVIDIA Parakeet TDT 0.6B v3 — TensorRT FP16   ║
-║   VAD : Silero ONNX (CPU)                       ║
-║   Author : Vincent Foucault — Avril 2026        ║
-╚═════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════╗
+║   qbo_stt — Speech-To-Text Node — Robot Néo                      ║
+║   FastConformer CTC multilingue — ONNX Runtime CUDA              ║
+║   VAD : Silero ONNX (CPU) — hystérésis 0.50/0.50 + N consécutifs ║
+║   Sans débruitage (FastConformer préfère le signal brut)         ║
+║   Author : Vincent Foucault — Avril 2026 — MIT                   ║
+╚══════════════════════════════════════════════════════════════════╝
 
-Topics publiés :
-  /listened              (std_msgs/String) — texte transcrit
-Topics souscrits :
-  /is_listening    (std_msgs/Bool)   — True = écoute active
+Version v19 — Suppression définitive de RNNoise + seuils renforcés
+
+Analyse comparative A/B (v17) :
+  Corpus de test identique, RNNoise ON vs OFF.
+
+  ❌ Avec RNNoise :
+     "Donc que tu vas bien"      → "Don que tu vas bien"   (-c)
+     "Est-ce que tu vas bien"    → "Êt - ce que tu vas bien"
+     "Comment vas-tu"            → "Comment vras - tu"
+     "Répète-moi ton prénom"     → "Aaprès moi, ton canon"
+     "Après moi ton prénom"      → "Après de moi toneon"
+
+  ✅ Sans RNNoise :
+     "Est-ce que tu en es certain ?"                  → parfait
+     "De toute évidence, c'est le filtre noise ..."   → parfait
+
+Causes :
+  1. FastConformer (NeMo) est entraîné sur LibriSpeech, MCV, VoxPopuli
+     avec bruit naturel modéré.
+  2. RNNoise (RNN pour VoIP) applique un filtre agressif qui coupe :
+       - Fricatives sourdes /s/ /f/ /ʃ/  → "Répète"  → "Après"
+       - Consonnes nasales finales /n/ /m/ → "prénom" → "canon"
+       - Attaques d'occlusives /p/ /t/ /k/ → "Donc"   → "Don"
+  3. Les artefacts spectraux (gains variables par frame) créent
+     une distorsion que FastConformer n'a jamais vue à l'entraînement.
+
+Observation secondaire (logs v17) :
+  Reprises confirmées suspectes avec prob = 0.486, 0.488, 0.460
+  (3 chunks tout juste au-dessus de 0.45 sur bruit ambiant soutenu,
+  pas une vraie reprise). Critère à durcir.
+
+Fixes v19 :
+  ✅ RNNoise supprimé du code (classe, imports, paramètres, appels).
+     Le signal brut ReSpeaker Lite → FastConformer directement.
+  ✅ vad_threshold_end : 0.45 → 0.50.
+     Les vraies reprises montent à 0.7-0.9, aucune perte ; les
+     queues LSTM à 0.40-0.48 sont maintenant filtrées.
+  ✅ RMS_RESUME_MIN : un chunk ne compte comme candidat reprise
+     que si son RMS > 0.008. Filtre les pseudo-reprises sur bruit
+     ambiant de faible énergie (respiration, réverb).
+
+Changements historiques :
+  v14→v15 : suppression flush_fast, pre-buffer 800ms.
+  v15→v16 : hystérésis Silero, suppression RMS_SPEECH, debug VAD.
+  v16→v17 : threshold_end 0.45, N chunks consécutifs pour reprise.
+  v17→v19 : RNNoise SUPPRIMÉ, threshold_end 0.50, RMS_RESUME_MIN.
 """
 
+import re
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
@@ -25,125 +69,63 @@ import threading
 import queue
 import time
 import os
+from collections import deque
 
-# ── TensorRT ──────────────────────────────────────────────────────────────────
-import tensorrt as trt
-import pycuda.driver as cuda
-cuda.init()   # init globale uniquement — make_context() dans le thread inference
-
-# ── ONNX Runtime — Silero VAD uniquement ──────────────────────────────────────
 import onnxruntime as ort
-
-# ── Audio ─────────────────────────────────────────────────────────────────────
 import pyaudio
 import librosa
 
-# ── Chemins par défaut ────────────────────────────────────────────────────────
-ENGINE_DIR     = '/models/engine_model'
-ENCODER_ENGINE = os.path.join(ENGINE_DIR, 'encoder.engine')
-DECODER_ENGINE = os.path.join(ENGINE_DIR, 'decoder_joint.engine')
-VOCAB_FILE     = os.path.join(ENGINE_DIR, 'vocab.txt')
-VAD_MODEL      = os.path.join(ENGINE_DIR, 'silero_vad.onnx')
+# ── Chemins des modèles ───────────────────────────────────────────────────────
+MODEL_BASE = '/home/nvidia/qbo_ws/src/qbo_stt/models'
+FC_MODEL   = os.path.join(MODEL_BASE, 'model.onnx')
+FC_TOKENS  = os.path.join(MODEL_BASE, 'tokens.txt')
+VAD_MODEL  = os.path.join(MODEL_BASE, 'silero_vad.onnx')
 
-# ── Constantes NeMo mel ───────────────────────────────────────────────────────
-SR         = 16000
+# ── Constantes audio ──────────────────────────────────────────────────────────
+SR = 16000
+
+# ── Paramètres mel NeMo ───────────────────────────────────────────────────────
+N_MELS     = 80
 N_FFT      = 512
 HOP_LENGTH = 160
 WIN_LENGTH = 320
-N_MELS     = 128
-FMIN       = 0
-FMAX       = 8000
 
-# ── Décodage TDT ──────────────────────────────────────────────────────────────
-DURATIONS = [0, 1, 2, 3, 4]
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  TRT Engine — buffers GPU pré-alloués, shape-aware
-# ══════════════════════════════════════════════════════════════════════════════
-class TRTEngine:
-    """
-    Wrapper TensorRT avec pré-allocation des buffers GPU.
-    Réallocation uniquement si la shape change → zéro malloc
-    au runtime pour le decoder (shape toujours fixe 1x1).
-    """
-    TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
-
-    def __init__(self, path: str):
-        with open(path, 'rb') as f:
-            self.engine  = trt.Runtime(self.TRT_LOGGER).deserialize_cuda_engine(f.read())
-        self.context = self.engine.create_execution_context()
-        self.stream  = cuda.Stream()
-        self._d_in   = {}
-        self._d_out  = {}
-        self._h_out  = {}
-
-    def infer(self, inputs: dict) -> dict:
-        # ── Host → Device ─────────────────────────────────────────────────────
-        for name, arr in inputs.items():
-            arr = np.ascontiguousarray(arr)
-            self.context.set_input_shape(name, arr.shape)
-            if name not in self._d_in or self._d_in[name][1] != arr.nbytes:
-                if name in self._d_in:
-                    self._d_in[name][0].free()
-                self._d_in[name] = (cuda.mem_alloc(arr.nbytes), arr.nbytes)
-            cuda.memcpy_htod_async(self._d_in[name][0], arr, self.stream)
-
-        # ── Allocation outputs ────────────────────────────────────────────────
-        for i in range(self.engine.num_io_tensors):
-            name = self.engine.get_tensor_name(i)
-            if self.engine.get_tensor_mode(name) == trt.TensorIOMode.OUTPUT:
-                shape  = tuple(self.context.get_tensor_shape(name))
-                dtype  = trt.nptype(self.engine.get_tensor_dtype(name))
-                nbytes = int(np.prod(shape)) * np.dtype(dtype).itemsize
-                if name not in self._d_out or self._d_out[name][1] != nbytes:
-                    if name in self._d_out:
-                        self._d_out[name][0].free()
-                    self._d_out[name] = (cuda.mem_alloc(nbytes), nbytes)
-                    self._h_out[name] = np.empty(shape, dtype=dtype)
-
-        # ── Set tensor addresses ──────────────────────────────────────────────
-        for name, (d, _) in self._d_in.items():
-            self.context.set_tensor_address(name, int(d))
-        for name, (d, _) in self._d_out.items():
-            self.context.set_tensor_address(name, int(d))
-
-        # ── Inférence async ───────────────────────────────────────────────────
-        self.context.execute_async_v3(self.stream.handle)
-
-        # ── Device → Host ─────────────────────────────────────────────────────
-        for name, (d, _) in self._d_out.items():
-            cuda.memcpy_dtoh_async(self._h_out[name], d, self.stream)
-        self.stream.synchronize()
-
-        return {name: self._h_out[name] for name in self._d_out}
-
-    def destroy(self):
-        """Libérer tous les buffers GPU et le stream AVANT ctx.pop()."""
-        self.stream.synchronize()
-        for _, (d, _) in self._d_in.items():
-            d.free()
-        for _, (d, _) in self._d_out.items():
-            d.free()
-        self._d_in.clear()
-        self._d_out.clear()
-        self._h_out.clear()
-        del self.context
-        del self.engine
+# ── Filtres post-transcription ────────────────────────────────────────────────
+_VALID_CHARSET = re.compile(
+    r"^[a-zA-Z0-9àâäéèêëîïôùûüœæçÀÂÄÉÈÊËÎÏÔÙÛÜŒÆÇ\s'\-\,\.\!\?\:\;\(\)%°]+$"
+)
+_GARBAGE_RE = re.compile(
+    r'<\w+>'
+    r'|^\s*$'
+    r'|\bWait\b'
+    r'|\bWa\b'
+)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Silero VAD — ONNX Runtime CPU
-#  Entrées : x [1,512]  h [2,1,64]  c [2,1,64]
-#  Sorties : prob [1,1]  new_h  new_c
+#  Silero VAD — ONNX Runtime CPU, hystérésis paramétrable
 # ══════════════════════════════════════════════════════════════════════════════
 class SileroVAD:
 
-    def __init__(self, model_path: str, threshold: float = 0.5):
-        self.threshold = threshold
-        self.session   = ort.InferenceSession(
-            model_path,
-            providers=['CPUExecutionProvider']  # CPU → GPU libre pour ASR TRT
+    def __init__(
+        self,
+        model_path: str,
+        threshold_start: float = 0.50,
+        threshold_end:   float = 0.50,
+    ):
+        """
+        Hystérésis :
+          - threshold_start : seuil pour DÉMARRER la détection (IDLE → PRE_SPEECH).
+          - threshold_end   : seuil pour CONFIRMER la parole en cours
+            (SPEECH, MAYBE_END). Doit être ≤ threshold_start.
+            À 0.50, les probs en silence (< 0.30 observées) passent sous
+            le radar, les vraies reprises (> 0.7) sont détectées sans
+            ambiguïté.
+        """
+        self.th_start = threshold_start
+        self.th_end   = threshold_end
+        self.session  = ort.InferenceSession(
+            model_path, providers=['CPUExecutionProvider']
         )
         self._h = np.zeros((2, 1, 64), dtype=np.float32)
         self._c = np.zeros((2, 1, 64), dtype=np.float32)
@@ -152,102 +134,135 @@ class SileroVAD:
         self._h = np.zeros((2, 1, 64), dtype=np.float32)
         self._c = np.zeros((2, 1, 64), dtype=np.float32)
 
-    def is_speech(self, chunk: np.ndarray) -> bool:
-        """chunk : float32 [512] à 16kHz → True si parole détectée"""
-        out             = self.session.run(None, {
+    def probability(self, chunk: np.ndarray) -> float:
+        out = self.session.run(None, {
             'x': chunk[np.newaxis].astype(np.float32),
             'h': self._h,
             'c': self._c,
         })
         prob, self._h, self._c = out[0], out[1], out[2]
-        return float(prob[0][0]) >= self.threshold
+        return float(prob[0][0])
+
+    def is_speech(self, chunk: np.ndarray, currently_active: bool) -> tuple:
+        """
+        Retourne (is_speech_bool, raw_probability).
+        Applique l'hystérésis : seuil haut pour démarrer, seuil bas pour
+        continuer.
+        """
+        prob = self.probability(chunk)
+        threshold = self.th_end if currently_active else self.th_start
+        return (prob >= threshold), prob
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Mel features — NeMo-compatible, 100% librosa/numpy
+#  FastConformer ASR — ONNX Runtime CUDA (sans TensorRT EP implicite)
 # ══════════════════════════════════════════════════════════════════════════════
-def extract_mel_nemo(wav: np.ndarray) -> tuple:
-    mel = librosa.feature.melspectrogram(
-        y=wav, sr=SR, n_fft=N_FFT, hop_length=HOP_LENGTH,
-        win_length=WIN_LENGTH, window='hann', n_mels=N_MELS,
-        fmin=FMIN, fmax=FMAX, power=2.0, center=True,
-    )
-    mel  = np.log(mel + 2 ** -24)
-    mean = mel.mean(axis=1, keepdims=True)
-    std  = mel.std(axis=1, keepdims=True)
-    mel  = (mel - mean) / (std + 1e-5)
-    mel  = mel[np.newaxis].astype(np.float32)
+class FastConformerASR:
 
-    # ── Padding si trop court pour l'engine (minShapes=20 frames) ────────────
-    MIN_FRAMES = 20  # 0.2s → principalement pour détecter "oui" ou "non"
-    if mel.shape[2] < MIN_FRAMES:
-        pad = MIN_FRAMES - mel.shape[2]
-        mel = np.pad(mel, ((0,0),(0,0),(0,pad)), mode='constant')
+    def __init__(self, model_path: str, tokens_path: str):
+        opts = ort.SessionOptions()
+        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
-    # ── Clip max engine (1000 frames ≈ 10s) ──────────────────────────────────
-    if mel.shape[2] > 1000:
-        mel = mel[:, :, :1000]
+        available_providers = ort.get_available_providers()
+        print(f'[FastConformer] Providers ORT disponibles : {available_providers}')
 
-    length = np.array([mel.shape[2]], dtype=np.int64)
-    return mel, length
+        cuda_provider_options = {
+            'device_id':                 0,
+            'arena_extend_strategy':     'kNextPowerOfTwo',
+            'gpu_mem_limit':             4 * 1024 * 1024 * 1024,
+            'cudnn_conv_algo_search':    'HEURISTIC',
+            'do_copy_in_default_stream': True,
+        }
 
+        self.session = ort.InferenceSession(
+            model_path,
+            sess_options=opts,
+            # TensorrtExecutionProvider intentionnellement ABSENT
+            providers=[
+                ('CUDAExecutionProvider', cuda_provider_options),
+                'CPUExecutionProvider',
+            ],
+        )
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  Parakeet ASR — encoder + greedy TDT decoder, 100% TRT
-# ══════════════════════════════════════════════════════════════════════════════
-class ParakeetASR:
+        for i, inp in enumerate(self.session.get_inputs()):
+            print(f'[FastConformer] Input[{i}] : {inp.name} {inp.shape} {inp.type}')
 
-    def __init__(self, encoder: TRTEngine, decoder: TRTEngine, vocab: dict):
-        self.encoder    = encoder
-        self.decoder    = decoder
-        self.vocab      = vocab
-        self.blank_id   = max(vocab.keys())
-        self.vocab_size = self.blank_id + 1
+        self.vocab = self._load_vocab(tokens_path)
+        self.blank = next(
+            (idx for idx, tok in self.vocab.items() if tok == '<blk>'), 0
+        )
+        self._output_name = self.session.get_outputs()[0].name
+
+    @staticmethod
+    def _load_vocab(path: str) -> dict:
+        vocab = {}
+        with open(path, encoding='utf-8') as f:
+            for line in f:
+                parts = line.rstrip('\n').split(' ', 1)
+                if len(parts) == 2:
+                    vocab[int(parts[1])] = parts[0]
+        return vocab
+
+    def _extract_mel(self, wav: np.ndarray) -> np.ndarray:
+        mel  = librosa.feature.melspectrogram(
+            y=wav, sr=SR,
+            n_fft=N_FFT, hop_length=HOP_LENGTH, win_length=WIN_LENGTH,
+            window='hann', n_mels=N_MELS,
+            fmin=0, fmax=8000, power=2.0, center=True,
+        )
+        mel  = np.log(mel + 1e-20)
+        mean = mel.mean(axis=1, keepdims=True)
+        std  = np.maximum(mel.std(axis=1, keepdims=True), 1e-5)
+        mel  = (mel - mean) / std
+        return mel[np.newaxis].astype(np.float32)
 
     def transcribe(self, wav: np.ndarray) -> tuple:
-        """wav : float32 mono 16kHz → (texte, rtf)"""
-        t0 = time.perf_counter()
+        t0           = time.perf_counter()
+        mel_input    = self._extract_mel(wav)
+        length_input = np.array([mel_input.shape[2]], dtype=np.int64)
+        logprobs = self.session.run(
+            [self._output_name],
+            {'audio_signal': mel_input, 'length': length_input}
+        )[0]
+        text = self._greedy_ctc_decode(logprobs[0])
+        dt   = time.perf_counter() - t0
+        return text, (dt / (len(wav) / SR) if len(wav) > 0 else 0.0)
 
-        mel, length = extract_mel_nemo(wav)
-        enc_out     = self.encoder.infer({'audio_signal': mel, 'length': length})
-        tokens      = self._greedy_decode(enc_out['outputs'])
-        text        = self._tokens_to_text(tokens)
+    def _greedy_ctc_decode(self, logprobs: np.ndarray) -> str:
+        token_ids = np.argmax(logprobs, axis=-1)
+        decoded, prev = [], None
+        for tok in token_ids:
+            tok = int(tok)
+            if tok != self.blank and tok != prev:
+                decoded.append(tok)
+            prev = tok
+        return ''.join(self.vocab.get(t, '') for t in decoded).replace('▁', ' ').strip()
 
-        dt  = time.perf_counter() - t0
-        dur = len(wav) / SR
-        return text, (dt / dur if dur > 0 else 0.0)
 
-    def _greedy_decode(self, enc_out: np.ndarray) -> list:
-        T      = enc_out.shape[2]
-        tokens = []
-        state1  = np.zeros((2, 1, 640), dtype=np.float16)
-        state2  = np.zeros((2, 1, 640), dtype=np.float16)
-        target  = np.array([[self.blank_id]], dtype=np.int64)
-        tgt_len = np.array([1], dtype=np.int64)
-        t = 0
-        while t < T:
-            out = self.decoder.infer({
-                'encoder_outputs': enc_out[:, :, t:t+1],
-                'targets':         target,
-                'target_length':   tgt_len,
-                'input_states_1':  state1,
-                'input_states_2':  state2,
-            })
-            logits = out['outputs'][0, 0, 0]
-            state1 = out['output_states_1']
-            state2 = out['output_states_2']
-            pred_token = int(np.argmax(logits[:self.vocab_size]))
-            pred_dur   = DURATIONS[int(np.argmax(logits[self.vocab_size:]))]
-            if pred_token == self.blank_id:
-                t += max(pred_dur, 1)
-            else:
-                tokens.append(pred_token)
-                target = np.array([[pred_token]], dtype=np.int64)
-                t += pred_dur
-        return tokens
+# ══════════════════════════════════════════════════════════════════════════════
+#  Nettoyage post-transcription
+# ══════════════════════════════════════════════════════════════════════════════
+def _clean_transcription(text: str) -> str:
+    t = _GARBAGE_RE.sub('', text)
+    t = re.sub(r'^[\u0400-\u04FF\u0500-\u052F\s\.\,\?\!\:\;\-]+', '', t)
+    t = re.sub(r'\.{2,}', ' ', t)
+    t = re.sub(r'[\s\.]+$', '', t)
+    return t.strip()
 
-    def _tokens_to_text(self, tokens: list) -> str:
-        return ''.join(self.vocab.get(t, '') for t in tokens).replace('▁', ' ').strip()
+
+def _is_valid_transcription(text: str, min_words: int = 1) -> bool:
+    t = text.strip()
+    if len(t) < 2:
+        return False
+    if len(t) <= 2 and len(t.split()) == 1:
+        return False
+    if not re.search(r'[a-zA-ZÀ-ÿœæŒÆ]', t):
+        return False
+    if not _VALID_CHARSET.match(t):
+        return False
+    if len(t.split()) < min_words:
+        return False
+    return True
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -260,36 +275,43 @@ class STTNode(Node):
         self.cb_group = ReentrantCallbackGroup()
 
         # ── Paramètres ROS2 ───────────────────────────────────────────────────
-        self.declare_parameter('encoder_engine',     ENCODER_ENGINE)
-        self.declare_parameter('decoder_engine',     DECODER_ENGINE)
-        self.declare_parameter('vocab_file',         VOCAB_FILE)
-        self.declare_parameter('vad_model',          VAD_MODEL)
-        self.declare_parameter('vad_threshold',      0.5)
-        self.declare_parameter('vad_min_silence_ms', 600)
-        self.declare_parameter('vad_min_speech_ms',  200)
-        self.declare_parameter('vad_max_speech_s',   10.0)
-        self.declare_parameter('vad_pre_buffer_ms',  256)
-        self.declare_parameter('audio_device_index', -1)
-        self.declare_parameter('chunk_size',         512)
+        self.declare_parameter('fc_model',                FC_MODEL)
+        self.declare_parameter('fc_tokens',               FC_TOKENS)
+        self.declare_parameter('vad_model',               VAD_MODEL)
+        self.declare_parameter('vad_threshold_start',     0.50)
+        self.declare_parameter('vad_threshold_end',       0.50)   # ↑ de 0.45
+        self.declare_parameter('vad_resume_consecutive',  3)      # chunks (~96ms)
+        self.declare_parameter('vad_min_silence_ms',      600)
+        self.declare_parameter('vad_min_speech_ms',       200)
+        self.declare_parameter('vad_max_speech_s',        10.0)
+        self.declare_parameter('vad_pre_buffer_ms',       800)
+        self.declare_parameter('audio_device_index',      0)
+        self.declare_parameter('chunk_size',              512)
+        self.declare_parameter('rtf_warn_threshold',      0.20)
+        self.declare_parameter('min_wav_duration_s',      0.30)
+        self.declare_parameter('min_words_to_publish',    1)
+        self.declare_parameter('vad_debug',               False)
 
-        enc_path   = os.path.expanduser(self.get_parameter('encoder_engine').value)
-        dec_path   = os.path.expanduser(self.get_parameter('decoder_engine').value)
-        vocab_path = os.path.expanduser(self.get_parameter('vocab_file').value)
-        vad_path   = os.path.expanduser(self.get_parameter('vad_model').value)
-        vad_thr    = self.get_parameter('vad_threshold').value
+        fc_model  = os.path.expanduser(self.get_parameter('fc_model').value)
+        fc_tokens = os.path.expanduser(self.get_parameter('fc_tokens').value)
+        vad_path  = os.path.expanduser(self.get_parameter('vad_model').value)
+        vad_th_s  = self.get_parameter('vad_threshold_start').value
+        vad_th_e  = self.get_parameter('vad_threshold_end').value
 
-        self.min_silence   = self.get_parameter('vad_min_silence_ms').value / 1000.0
-        self.min_speech    = self.get_parameter('vad_min_speech_ms').value  / 1000.0
-        self.max_speech    = self.get_parameter('vad_max_speech_s').value
-        self.pre_buffer_ms = self.get_parameter('vad_pre_buffer_ms').value  / 1000.0
-        self.device_index  = self.get_parameter('audio_device_index').value
-        self.chunk_size    = self.get_parameter('chunk_size').value
+        self.resume_consecutive = self.get_parameter('vad_resume_consecutive').value
+        self.min_silence        = self.get_parameter('vad_min_silence_ms').value  / 1000.0
+        self.min_speech         = self.get_parameter('vad_min_speech_ms').value   / 1000.0
+        self.max_speech         = self.get_parameter('vad_max_speech_s').value
+        self.pre_buffer_ms      = self.get_parameter('vad_pre_buffer_ms').value   / 1000.0
+        self.device_index       = self.get_parameter('audio_device_index').value
+        self.chunk_size         = self.get_parameter('chunk_size').value
+        self.rtf_warn_thr       = self.get_parameter('rtf_warn_threshold').value
+        self.min_wav_dur        = self.get_parameter('min_wav_duration_s').value
+        self.min_words          = self.get_parameter('min_words_to_publish').value
+        self.vad_debug          = self.get_parameter('vad_debug').value
 
-        # ── Publishers ────────────────────────────────────────────────────────
-        self.pub          = self.create_publisher(String, '/listened',            10)
-        # ── Subscription micro ────────────────────────────────────────────────
-        self.audio_enabled = True
-        self.audio_lock    = threading.Lock()
+        # ── Publishers / Subscriptions ────────────────────────────────────────
+        self.pub = self.create_publisher(String, '/listened', 10)
         self.create_subscription(
             Bool, '/is_listening',
             self._audio_control_callback, 10,
@@ -297,62 +319,114 @@ class STTNode(Node):
         )
 
         # ── État interne ──────────────────────────────────────────────────────
-        self.audio_queue     = queue.Queue(maxsize=4)
+        self.audio_enabled   = True
+        self.audio_lock      = threading.Lock()
+        self.vad             = None
+        self.asr             = None
+        self._model_lock     = threading.Lock()
+
+        self.audio_queue     = queue.Queue(maxsize=5)
         self._running        = True
         self._models_ready   = threading.Event()
         self._inference_done = threading.Event()
 
-        # ── Chemins stockés pour le thread inference ──────────────────────────
-        self._enc_path   = enc_path
-        self._dec_path   = dec_path
-        self._vocab_path = vocab_path
-        self._vad_path   = vad_path
-        self._vad_thr    = vad_thr
+        self._fc_model  = fc_model
+        self._fc_tokens = fc_tokens
+        self._vad_path  = vad_path
+        self._vad_th_s  = vad_th_s
+        self._vad_th_e  = vad_th_e
 
-        # ── Lancer inference en premier (crée le contexte CUDA) ──────────────
         threading.Thread(target=self._inference_loop, daemon=True).start()
-
-        # ── Attendre modèles prêts avant d'ouvrir le micro ───────────────────
         if not self._models_ready.wait(timeout=60.0):
             self.get_logger().error('Timeout chargement modèles !')
             return
-
         threading.Thread(target=self._audio_capture_loop, daemon=True).start()
 
     # ──────────────────────────────────────────────────────────────────────────
     def _audio_control_callback(self, msg: Bool):
         with self.audio_lock:
             self.audio_enabled = msg.data
-        state = '🎙️  activé' if msg.data else '🔇 désactivé'
-        self.get_logger().info(f'Micro {state}')
+        self.get_logger().info('🎙️  Écoute activée' if msg.data else '🔇 Écoute désactivée')
 
     # ──────────────────────────────────────────────────────────────────────────
     def _audio_capture_loop(self):
-        pa     = pyaudio.PyAudio()
+
+        pa = pyaudio.PyAudio()
         kwargs = dict(
-            format=pyaudio.paInt16, channels=1,
-            rate=SR, input=True, frames_per_buffer=self.chunk_size,
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=SR,
+            input=True,
+            frames_per_buffer=self.chunk_size,
         )
         if self.device_index >= 0:
             kwargs['input_device_index'] = self.device_index
 
         stream = pa.open(**kwargs)
-        self.get_logger().info(f'🎙️  Micro ouvert (device={self.device_index})')
+        self.get_logger().info(
+            f'🎙️  Micro ouvert (device={self.device_index}) | signal brut → FastConformer'
+        )
 
-        chunk_dur      = self.chunk_size / SR
-        silence_needed = int(self.min_silence   / chunk_dur)
-        speech_min     = int(self.min_speech    / chunk_dur)
-        speech_max     = int(self.max_speech    / chunk_dur)
-        pre_buf_max    = int(self.pre_buffer_ms / chunk_dur)  # ~8 chunks = 256ms
+        chunk_dur = self.chunk_size / SR   # ~0.032s pour chunk_size=512
 
-        speech_buffer  = []
-        pre_buffer     = []   # ring buffer pré-parole → évite de couper le début des mots
-        silence_frames = 0
-        speech_frames  = 0
-        in_speech      = False
+        # ── Seuils énergie (sur signal BRUT) ──────────────────────────────────
+        RMS_FLOOR      = 0.003   # forçage is_sp=False sur vrai silence
+        RMS_RESUME_MIN = 0.008   # énergie mini pour compter un chunk comme
+                                 # "candidat reprise" en MAYBE_END. Filtre
+                                 # les pseudo-reprises sur bruit ambiant
+                                 # de faible énergie (respiration, réverb).
+
+        MIN_SPEECH_MS     = int(self.min_speech    * 1000)   # 200ms
+        END_SILENCE_MS    = int(self.min_silence   * 1000)   # 600ms
+        MAX_SPEECH_MS     = int(self.max_speech    * 1000)   # 10s
+        MIN_FIRST_WORD_MS = 200
+        N_RESUME          = max(1, int(self.resume_consecutive))
+
+        # ── State machine ─────────────────────────────────────────────────────
+        # États :
+        #   IDLE         : pas de parole, on accumule le pre_buffer
+        #   PRE_SPEECH   : parole détectée récemment, pas encore validée
+        #   SPEECH       : parole en cours
+        #   MAYBE_END    : silence accumulé, on attend confirmation de fin
+        #                  OU N chunks consécutifs de parole pour reprendre
+        state               = "IDLE"
+        pre_buffer          = deque(maxlen=int(self.pre_buffer_ms / chunk_dur))
+        pending_speech      = []
+        speech_buffer       = []
+        silence_ms          = 0.0
+        speech_ms           = 0.0
+        consecutive_resume  = 0    # compteur chunks is_sp=True en MAYBE_END
+        debug_tick          = 0
+
+        with self._model_lock:
+            assert self.vad is not None
         self.vad.reset()
 
+        # ── Helpers ───────────────────────────────────────────────────────────
+        def reset():
+            nonlocal state, silence_ms, speech_ms, speech_buffer
+            nonlocal pending_speech, consecutive_resume
+            state              = "IDLE"
+            silence_ms         = 0.0
+            speech_ms          = 0.0
+            speech_buffer      = []
+            pending_speech     = []
+            consecutive_resume = 0
+            self.vad.reset()
+
+        def flush_and_send():
+            """Envoie le speech_buffer à la queue puis remet la machine à zéro."""
+            if speech_buffer:
+                wav = np.concatenate(speech_buffer)
+                try:
+                    self.audio_queue.put_nowait(wav)
+                except queue.Full:
+                    self.get_logger().warn('Queue pleine — segment ignoré')
+            reset()
+
+        # ── Boucle principale ─────────────────────────────────────────────────
         while self._running:
+
             with self.audio_lock:
                 enabled = self.audio_enabled
 
@@ -361,55 +435,114 @@ class STTNode(Node):
                     stream.read(self.chunk_size, exception_on_overflow=False)
                 except Exception:
                     pass
-                speech_buffer = []; pre_buffer = []
-                speech_frames = silence_frames = 0
-                if in_speech:
-                    in_speech = False
-                    self.vad.reset()
+                reset()
                 time.sleep(0.05)
                 continue
 
             try:
                 raw   = stream.read(self.chunk_size, exception_on_overflow=False)
                 chunk = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
-                is_sp = self.vad.is_speech(chunk)
 
-                if is_sp:
-                    silence_frames  = 0
-                    speech_frames  += 1
+                rms = float(np.sqrt(np.mean(chunk ** 2)))
+
+                # Hystérésis Silero
+                currently_active = state in ("SPEECH", "MAYBE_END")
+                with self._model_lock:
+                    is_sp, prob = self.vad.is_speech(chunk, currently_active)
+
+                # Sécurité énergie UNIQUEMENT dans le sens silence
+                if is_sp and rms < RMS_FLOOR:
+                    is_sp = False
+
+                # ── State machine ─────────────────────────────────────────────
+                if state == "IDLE":
+                    pre_buffer.append(chunk)
+                    if is_sp:
+                        state          = "PRE_SPEECH"
+                        pending_speech = [chunk]
+                        speech_ms      = chunk_dur * 1000
+
+                elif state == "PRE_SPEECH":
+                    if is_sp:
+                        pending_speech.append(chunk)
+                        speech_ms += chunk_dur * 1000
+                        if speech_ms > MIN_SPEECH_MS:
+                            # Validation : on garde TOUT le pre_buffer (800ms)
+                            state          = "SPEECH"
+                            speech_buffer  = list(pre_buffer) + pending_speech
+                            pre_buffer.clear()
+                            pending_speech = []
+                    else:
+                        # Faux départ : recycler dans le pre_buffer
+                        for c in pending_speech:
+                            pre_buffer.append(c)
+                        pending_speech = []
+                        state          = "IDLE"
+                        speech_ms      = 0.0
+
+                elif state == "SPEECH":
+                    speech_buffer.append(chunk)
+                    speech_ms += chunk_dur * 1000
+                    if is_sp:
+                        silence_ms = 0.0
+                    else:
+                        state              = "MAYBE_END"
+                        silence_ms         = chunk_dur * 1000
+                        consecutive_resume = 0
+
+                    if speech_ms > MAX_SPEECH_MS:
+                        flush_and_send()
+
+                elif state == "MAYBE_END":
+                    # On continue à accumuler l'audio (on ne perd rien)
                     speech_buffer.append(chunk)
 
-                    if not in_speech and speech_frames >= speech_min:
-                        in_speech     = True
-                        # Préfixer le segment avec les chunks pré-parole
-                        speech_buffer = list(pre_buffer) + speech_buffer
-                        pre_buffer    = []
+                    # Candidat reprise : prob ≥ th_end ET énergie suffisante.
+                    # La condition RMS évite les pseudo-reprises sur bruit
+                    # ambiant de faible énergie (respiration, réverb).
+                    is_real_resume = is_sp and rms >= RMS_RESUME_MIN
 
-                    # Sécurité durée max
-                    if speech_frames >= speech_max:
-                        self._flush(speech_buffer)
-                        speech_buffer = []; pre_buffer = []
-                        speech_frames = silence_frames = 0
-                        in_speech     = False
-                        self.vad.reset()
+                    if is_real_resume:
+                        consecutive_resume += 1
 
-                else:
-                    if in_speech:
-                        silence_frames += 1
-                        speech_buffer.append(chunk)
-                        if silence_frames >= silence_needed:
-                            self._flush(speech_buffer)
-                            speech_buffer = []; pre_buffer = []
-                            speech_frames = silence_frames = 0
-                            in_speech     = False
-                            self.vad.reset()
+                        if self.vad_debug:
+                            self.get_logger().info(
+                                f'[MAYBE_END] ↑ candidat reprise '
+                                f'{consecutive_resume}/{N_RESUME} '
+                                f'prob={prob:.3f} rms={rms:.4f}'
+                            )
+
+                        if consecutive_resume >= N_RESUME:
+                            # Reprise confirmée → retour SPEECH
+                            state              = "SPEECH"
+                            silence_ms         = 0.0
+                            consecutive_resume = 0
+                            if self.vad_debug:
+                                self.get_logger().info(
+                                    '[MAYBE_END → SPEECH] reprise confirmée'
+                                )
                     else:
-                        # Maintenir le ring buffer pré-parole
-                        pre_buffer.append(chunk)
-                        if len(pre_buffer) > pre_buf_max:
-                            pre_buffer.pop(0)
-                        speech_buffer = []
-                        speech_frames = 0
+                        # Chunk silencieux OU prob élevée mais faible énergie :
+                        # on invalide le compteur reprise et on accumule silence.
+                        consecutive_resume = 0
+                        silence_ms += chunk_dur * 1000
+
+                        if self.vad_debug:
+                            debug_tick += 1
+                            if debug_tick % 6 == 0:
+                                self.get_logger().info(
+                                    f'[MAYBE_END] silence={silence_ms:.0f}ms '
+                                    f'speech={speech_ms:.0f}ms '
+                                    f'prob={prob:.3f} rms={rms:.4f}'
+                                )
+
+                        if silence_ms > END_SILENCE_MS:
+                            if speech_ms < MIN_FIRST_WORD_MS:
+                                reset()
+                            else:
+                                flush_and_send()
+                        elif speech_ms > MAX_SPEECH_MS:
+                            flush_and_send()
 
             except Exception as e:
                 self.get_logger().warn(f'Audio error : {e}')
@@ -419,37 +552,30 @@ class STTNode(Node):
         pa.terminate()
 
     # ──────────────────────────────────────────────────────────────────────────
-    def _flush(self, buffer: list):
-        if len(buffer) < 2:
-            return
-        wav = np.concatenate(buffer)
-        try:
-            self.audio_queue.put_nowait(wav)
-        except queue.Full:
-            self.get_logger().warn('Queue pleine — segment ignoré')
-
-    # ──────────────────────────────────────────────────────────────────────────
     def _inference_loop(self):
-        """Tout CUDA vit et meurt dans ce thread uniquement."""
-        ctx     = cuda.Device(0).make_context()
-        encoder = None
-        decoder = None
         try:
-            self.get_logger().info('⚡ Chargement engines TensorRT...')
-            encoder = TRTEngine(self._enc_path)
-            self.get_logger().info(f'  ✅ Encoder : {os.path.basename(self._enc_path)}')
-            decoder = TRTEngine(self._dec_path)
-            self.get_logger().info(f'  ✅ Decoder : {os.path.basename(self._dec_path)}')
-            vocab = self._load_vocab(self._vocab_path)
-            self.get_logger().info(f'  ✅ Vocab   : {len(vocab)} tokens')
-            self.asr = ParakeetASR(encoder, decoder, vocab)
-            self.vad = SileroVAD(self._vad_path, self._vad_thr)
-            self.get_logger().info(f'  ✅ VAD     : {os.path.basename(self._vad_path)}')
+            self.get_logger().info('⚡ Chargement FastConformer CTC CUDA...')
+            asr = FastConformerASR(self._fc_model, self._fc_tokens)
+            self.get_logger().info(f'  ✅ FastConformer : {os.path.basename(self._fc_model)}')
+            self.get_logger().info(f'  ✅ Vocab         : {len(asr.vocab)} tokens')
+            self.get_logger().info(f'  ✅ Blank token   : index {asr.blank}')
 
-            # ── Warmup — élimine le RTF anormal sur la 1ère transcription ────
-            self.get_logger().info('🔥 Warmup TRT...')
+            vad = SileroVAD(self._vad_path, self._vad_th_s, self._vad_th_e)
+            self.get_logger().info(
+                f'  ✅ VAD           : silero_vad.onnx '
+                f'(hystérésis {self._vad_th_s:.2f}/{self._vad_th_e:.2f}, '
+                f'resume_consecutive={self.resume_consecutive})'
+            )
+
+            with self._model_lock:
+                self.asr = asr
+                self.vad = vad
+
+            self.get_logger().info('🔥 Warmup FastConformer...')
+            t_warmup = time.perf_counter()
             self.asr.transcribe(np.zeros(SR, dtype=np.float32))
-            self.get_logger().info('✅ STT prêt — en écoute')
+            dt_warmup = time.perf_counter() - t_warmup
+            self.get_logger().info(f'✅ STT FastConformer CTC FR prêt ({dt_warmup:.1f}s) — en écoute')
             self._models_ready.set()
 
             while self._running:
@@ -457,49 +583,48 @@ class STTNode(Node):
                     wav = self.audio_queue.get(timeout=0.5)
                 except queue.Empty:
                     continue
-                text, rtf = self.asr.transcribe(wav)
+                if wav is None:
+                    break
+
                 dur = len(wav) / SR
-                if text:
-                    self.get_logger().info(f'💬 [{dur:.2f}s | RTF={rtf:.3f}] → {text}')
-                    msg      = String()
-                    msg.data = text
-                    self.pub.publish(msg)
-                else:
-                    self.get_logger().debug('Segment vide — ignoré')
+
+                # Rejet préventif avant inférence
+                if dur < self.min_wav_dur:
+                    self.get_logger().debug(f'Segment court ({dur:.2f}s) — ignoré')
+                    continue
+                if float(np.sqrt(np.mean(wav ** 2))) < 0.005:
+                    self.get_logger().debug('Segment silencieux — ignoré')
+                    continue
+
+                # ── Inférence FastConformer directement sur le signal brut ────
+                text, rtf = self.asr.transcribe(wav)
+                text      = _clean_transcription(text)
+
+                if rtf > self.rtf_warn_thr:
+                    self.get_logger().warn(f'⚠️  RTF élevé : {rtf:.3f}')
+                if not _is_valid_transcription(text, self.min_words):
+                    self.get_logger().debug(f'Filtré : [{text!r}]')
+                    continue
+
+                self.get_logger().info(f'💬 [{dur:.2f}s | RTF={rtf:.3f}] → {text}')
+                msg      = String()
+                msg.data = text
+                self.pub.publish(msg)
 
         except Exception as e:
             self.get_logger().error(f'Inference thread fatal : {e}')
-            self._models_ready.set()  # débloquer __init__ même en cas d'erreur
+            self._models_ready.set()
         finally:
-            # ── Libérer TRT explicitement AVANT ctx.pop() ─────────────────────
-            # Sans ça, le GC Python détruit les engines après ctx.pop()
-            # → "context is destroyed" / Myelin stream error → segfault
-            if encoder is not None:
-                encoder.destroy()
-            if decoder is not None:
-                decoder.destroy()
-            ctx.synchronize()
-            ctx.pop()
-            ctx.detach()
             self._inference_done.set()
-
-    # ──────────────────────────────────────────────────────────────────────────
-    @staticmethod
-    def _load_vocab(path: str) -> dict:
-        vocab = {}
-        with open(path) as f:
-            for line in f:
-                parts = line.strip().split()
-                if len(parts) >= 2:
-                    vocab[int(parts[1])] = parts[0]
-        return vocab
 
     # ──────────────────────────────────────────────────────────────────────────
     def destroy_node(self):
         self._running = False
-        # Attendre que le thread inference ait nettoyé CUDA proprement
-        self._inference_done.wait(timeout=3.0)
-        # Aucun appel CUDA ici — tout est géré dans _inference_loop
+        try:
+            self.audio_queue.put_nowait(None)
+        except queue.Full:
+            pass
+        self._inference_done.wait(timeout=5.0)
         super().destroy_node()
 
 

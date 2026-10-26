@@ -1,0 +1,21 @@
+qbo_discussion_node:
+  ros__parameters:
+    # Configuration du modèle RAG
+    json_path: "/home/nvidia/qbo_ws/src/qbo_discussion/qbo_discussion/rag/neo_json_random.json"
+    model_name: "intfloat/multilingual-e5-large"
+    confidence_threshold: 0.87
+    
+    # Configuration utilisateur
+    user_name: "Vincent"
+    
+    # Réponses de fallback en cas d'échec
+    fallback_responses:
+      - "Je n'ai pas bien compris. Peux-tu reformuler ?"
+      - "Hmm, je ne suis pas sûr de comprendre. Peux-tu m'expliquer différemment ?"
+      - "Cette question est un peu complexe pour moi. Peux-tu la poser autrement ?"
+      - "Je réfléchis... Peux-tu m'aider en reformulant ta question ?"
+    
+    # Configuration avancée
+    query_cache_size: 100
+    batch_size: 32
+    log_stats_interval: 60.0  # secondes

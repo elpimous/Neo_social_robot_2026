@@ -1,0 +1,3 @@
+#!/usr/bin/env python3
+from qbo_navigation.odom_republisher import main
+main()

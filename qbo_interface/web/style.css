@@ -1,0 +1,28 @@
+body {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    background-color: #f9f9f9;
+}
+h1 {
+    text-align: center;
+    color: #333;
+}
+#graph {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 15px;
+}
+.state-bubble {
+    padding: 15px 20px;
+    border-radius: 20px;
+    background: #d0e8ff;
+    color: #003366;
+    font-weight: bold;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+.state-bubble.active {
+    background: #4CAF50;
+    color: white;
+}

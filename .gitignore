@@ -13,3 +13,14 @@ realsense-ros/
 # Ignorer les fichiers Python compilés
 __pycache__/
 *.pyc
+
+# Modèles lourds et données générées (non versionnés)
+*.engine
+*.whl
+listen_and_talk/models/
+qbo_stt/models/*.onnx
+qbo_faces_tracking/models/
+
+# Données personnelles (photos et empreintes de visages)
+qbo_faces_tracking/datas/
+qbo_faces_tracking/face_embeddings/

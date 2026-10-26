@@ -82,99 +82,72 @@ pip install pycuda librosa pyaudio numpy
 
 Les engines `.engine` doivent être générés **sur la Jetson cible** (non portables entre GPU différents). Effectuer cette opération une seule fois.
 
+
 ### 1. Télécharger les modèles FP32 (HuggingFace)
+mkdir -p /home/nvidia/qbo_ws/src/qbo_stt/models/whisper_small_onnx
+cd /home/nvidia/qbo_ws/src/qbo_stt/models/whisper_small
 
-```bash
-pip install huggingface_hub
+# Encoder
+     wget https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-encoder.onnx
 
-python3 -c "
-from huggingface_hub import hf_hub_download
-import os
-os.makedirs('/engine_model', exist_ok=True)
-for f in ['encoder-model.onnx', 'encoder-model.onnx.data',
-          'decoder_joint-model.onnx', 'vocab.txt']:
-    hf_hub_download(
-        repo_id='istupakov/parakeet-tdt-0.6b-v3-onnx',
-        filename=f, local_dir='/engine_model'
-    )
-    print(f'{f} OK')
-"
-```
-### 1.1 Inspection des fichiers :
+     # Decoder
+     wget https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-decoder.onnx
 
-python3 -c "
-import onnx
-for name in ['encoder-model','decoder_joint-model']:
-    m = onnx.load(f'parakeet-fp32/{name}.onnx', load_external_data=True)
-    print(f'\n=== {name} ===')
-    for i in m.graph.input:
-        dims = [d.dim_value if d.dim_value else d.dim_param for d in i.type.tensor_type.shape.dim]
-        print(f'  IN  {i.name}: {dims}')
-    for o in m.graph.output:
-        dims = [d.dim_value if d.dim_value else d.dim_param for d in o.type.tensor_type.shape.dim]
-        print(f'  OUT {o.name}: {dims}')
-"
+# Tokens
+wget https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-tokens.txt
 
 
-
-### 2. Compiler l'encoder (~45 min)
-
+# Encoder
 /usr/src/tensorrt/bin/trtexec \
-    --onnx=/home/nvidia/Downloads/sherpa-onnx/parakeet-fp32/encoder-model.onnx \
-    --saveEngine=/home/nvidia/Downloads/sherpa-onnx/parakeet-fp32/encoder-model.engine \
-    --fp16 \
-    `# 0.2s min → couvre "oui", "non", mots très courts` \
-    --minShapes="audio_signal:1x128x20,length:1" \
-    `# 3s opt → phrase courte typique robot` \
-    --optShapes="audio_signal:1x128x300,length:1" \
-    `# 10s max` \
-    --maxShapes="audio_signal:1x128x1000,length:1" \
-    --memPoolSize=workspace:2048MiB \
-    --builderOptimizationLevel=5 \
-    --sparsity=enable \
-    --useCudaGraph \
-    --noTF32 \
-    --timingCacheFile=/home/nvidia/qbo_ws/src/qbo_stt/models/engine/timing.cache \
-    --verbose 2>&1 | tee /tmp/encoder_build.log
-
-### 3. Compiler le decoder (~5 min)
-
-```bash
-cat > /tmp/build_decoder.sh << 'EOF'
-#!/bin/bash
-/usr/src/tensorrt/bin/trtexec \
-  --onnx=/engine_model/decoder_joint-model.onnx \
-  --saveEngine=/engine_model/decoder_joint.engine \
+  --onnx=small-encoder.onnx \
+  --saveEngine=small-encoder.engine \
   --fp16 \
-  `# shape FIXE 1x1 → kernel statique ultra-optimisé` \
-  --minShapes="encoder_outputs:1x1024x1,targets:1x1,target_length:1,input_states_1:2x1x640,input_states_2:2x1x640" \
-  --optShapes="encoder_outputs:1x1024x1,targets:1x1,target_length:1,input_states_1:2x1x640,input_states_2:2x1x640" \
-  --maxShapes="encoder_outputs:1x1024x1,targets:1x1,target_length:1,input_states_1:2x1x640,input_states_2:2x1x640" \
-  --memPoolSize=workspace:512MiB \
-  `# CudaGraph rejouée identiquement à chaque step (~100x par audio)` \
-  --builderOptimizationLevel=5 \
-  --sparsity=enable \
-  --useCudaGraph \
   --noTF32 \
-  --timingCacheFile=/engine_model/timing.cache \
-  --verbose 2>&1 | tee /engine_model/decoder_build.log
-EOF
-chmod +x /tmp/build_decoder.sh && /tmp/build_decoder.sh
-```
+  --builderOptimizationLevel=5 \
+  --useCudaGraph
+
+/usr/src/tensorrt/bin/trtexec \
+  --onnx=small-encoder.onnx \
+  --saveEngine=whisper_encoder_fp16.engine \
+  --fp16 \
+  --minShapes=mel:1x80x50 \
+  --optShapes=mel:1x80x500 \
+  --maxShapes=mel:1x80x1500 \
+  --builderOptimizationLevel=5 \
 
 
-
-### 4. Vérifier les engines générés
-
-```bash
-ls -lh ~/qbo_ws/src/qbo_stt/models/engine
-total 1,3G
--rw-r--r-- 1 root root  35M avril  3 14:01 decoder_joint.engine
--rw-r--r-- 1 root root 1,2G avril  3 14:01 encoder.engine
--rw-r--r-- 1 root root  92K avril  3 14:01 vocab.txt
-```
-
+# Decoder
+/usr/src/tensorrt/bin/trtexec \
+  --onnx=/home/nvidia/qbo_ws/src/qbo_stt/models/whisper_small/small-decoder.onnx \
+  --saveEngine=/home/nvidia/qbo_ws/src/qbo_stt/models/whisper_small/whisper_decoder_fp16.engine \
+  --fp16 \
+  --noTF32 \
+  --builderOptimizationLevel=5 \
+  --useCudaGraph \
+  --minShapes=tokens:1x1,\
+in_n_layer_self_k_cache:12x1x448x768,\
+in_n_layer_self_v_cache:12x1x448x768,\
+n_layer_cross_k:12x1x448x768,\
+n_layer_cross_v:12x1x448x768,\
+offset:1 \
+  --optShapes=tokens:1x1,\
+in_n_layer_self_k_cache:12x1x448x768,\
+in_n_layer_self_v_cache:12x1x448x768,\
+n_layer_cross_k:12x1x448x768,\
+n_layer_cross_v:12x1x448x768,\
+offset:1 \
+  --maxShapes=tokens:1x1,\
+in_n_layer_self_k_cache:12x1x448x768,\
+in_n_layer_self_v_cache:12x1x448x768,\
+n_layer_cross_k:12x1x448x768,\
+n_layer_cross_v:12x1x448x768,\
+offset:1
 ---
+
+# téléchargement de TEN VAD
+wget https://huggingface.co/TEN-framework/ten-vad/resolve/main/src/onnx_model/ten-vad.onnx
+# compiler TEN VAD
+/usr/src/tensorrt/bin/trtexec     --onnx=ten-vad.onnx     --saveEngine=ten-vad.engine     --fp16
 
 ## Installation du package ROS2
 

@@ -1,0 +1,45 @@
+slam_toolbox:
+  ros__parameters:
+    # Frames
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_footprint
+    scan_topic: /scan
+
+    # Fréquence & déclencheurs (moins agressif)
+    update_rate: 5.0
+    minimum_travel_distance: 0.03
+    minimum_travel_heading: 0.05
+    minimum_time_interval: 0.25
+    laser_queue_size: 50
+    
+    # Qualité map
+    resolution: 0.05          # 5 cm souvent plus stable qu'à 4 cm
+    min_laser_range: 0.20
+    max_laser_range: 11.0
+
+    # Scan matching
+    use_scan_matching: true
+    use_scan_barycenter: true   # teste sans d'abord
+
+    # === LOOP CLOSURE - VERSION STRICTE ===
+    do_loop_closing: true
+    loop_match_minimum_chain_size: 12          # au lieu de 8 → il faut 12 scans alignés pour accepter
+    loop_match_maximum_variance_coarse: 1.2    # au lieu de 3.0 → beaucoup plus strict sur la variance
+    loop_match_minimum_response_coarse: 0.55   # au lieu de 0.35 → score minimum bien plus élevé
+
+    # Nouveaux paramètres (ils contrôlent la zone de recherche)
+    loop_search_maximum_distance: 2.0          # max 2 m entre scans pour chercher un loop (au lieu de ~3-8 m par défaut)
+    loop_search_space_dimension: 4.0           # zone de recherche réduite (moins de faux matchs lointains)
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03
+
+    # Recherche
+    correlation_search_space_dimension: 0.3
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.03
+
+    # Update map
+    map_update_interval: 0.5
+    transform_publish_period: 0.05
+    tf_buffer_duration: 30.0
