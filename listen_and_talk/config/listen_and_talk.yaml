@@ -1,0 +1,82 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  listen_and_talk.yaml — paramètres des nodes listen_node et talk_node (Néo)
+#  Author : Vincent FOUCAULT — Octobre 2026
+#
+#  Chemins : "pkg://<paquet>/<chemin>" = dossier share du paquet installé.
+#  Modifiables à chaud (talk) : volume_gain, speed, sid, alsa_volume_percent
+#     ros2 param set /talk_node volume_gain 1.5
+# ═══════════════════════════════════════════════════════════════════════════════
+
+talk_node:
+  ros__parameters:
+    # ── Voix (inchangée : axel.onnx du paquet qbo_tts) ───────────────────────
+    tts_model:        "pkg://qbo_tts/models/axel.onnx"
+    tts_tokens:       "pkg://qbo_tts/models/tokens.txt"
+    tts_data_dir:     "pkg://qbo_tts/models/espeak-ng-data"
+    tts_provider:     "cuda"        # cuda | cpu (repli CPU automatique si échec)
+    tts_num_threads:  2
+    sid:              0
+    speed:            1.0           # 0.8 plus lent … 1.2 plus rapide
+    sentence_pause_ms: 140.0        # pause entre deux phrases
+
+    # ── Niveau ───────────────────────────────────────────────────────────────
+    normalize:        true          # chaque phrase normalisée à target_peak_db
+    target_peak_db:   -1.0          # crête cible (dBFS)
+    volume_gain:      1.0           # gain logiciel en plus (limiteur doux, pas d'écrêtage)
+    alsa_volume_percent: 100        # volume MATÉRIEL de la carte (-1 = ne pas toucher)
+    alsa_card:        ""            # vide = même nom que audio_device
+
+    # ── Carte son de sortie (C-Media) ────────────────────────────────────────
+    audio_device:     "USB Audio Device"
+    output_sample_rate: 44100       # repli auto 44100/48000
+    output_channels:  2
+    output_latency_ms: 50.0
+
+    warmup:           true          # inférence muette au démarrage (GPU chaud)
+    startup_phrase:   ""            # ex. "Je suis prêt."
+    input_topic:      "/to_speak"
+
+listen_node:
+  ros__parameters:
+    # ── ASR : Parakeet TDT 0.6B v3 (25 langues, ponctuation + majuscules) ────
+    asr_model_type:   "nemo_transducer"   # ou "nemo_ctc" (+ asr_ctc_model)
+    asr_encoder:      "pkg://listen_and_talk/models/listen/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/encoder.int8.onnx"
+    asr_decoder:      "pkg://listen_and_talk/models/listen/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/decoder.int8.onnx"
+    asr_joiner:       "pkg://listen_and_talk/models/listen/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/joiner.int8.onnx"
+    asr_tokens:       "pkg://listen_and_talk/models/listen/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/tokens.txt"
+    asr_ctc_model:    ""
+    asr_provider:     "cpu"         # int8 → CPU recommandé ; tester "cuda" et comparer les ms loguées
+    asr_num_threads:  4
+
+    # ── VAD ──────────────────────────────────────────────────────────────────
+    vad_model:        "pkg://listen_and_talk/models/listen/silero_vad.onnx"  # ou ten-vad.onnx
+    vad_threshold:    0.5
+    vad_min_silence_s: 0.6          # silence de fin de phrase
+    vad_min_speech_s: 0.2
+    vad_max_speech_s: 12.0
+    preroll_ms:       250
+    postroll_ms:      150
+    min_segment_s:    0.35
+    min_segment_rms:  0.004
+
+    # ── Écho (voix de Néo dans son propre micro) & barge-in ──────────────────
+    barge_in:         true          # l'utilisateur peut couper la parole
+    echo_tail_ms:     450           # traîne ignorée après /is_speaking=false
+    echo_latency_ms:  120
+    barge_in_grace_ms: 350          # apprentissage du niveau d'écho
+    barge_in_ms:      160           # temps de parole "forte"…
+    barge_in_window_ms: 640         # …requis dans cette fenêtre
+    barge_in_ratio:   2.0           # ×niveau d'écho (augmenter si fausses coupures)
+    barge_in_min_rms: 0.02
+
+    # ── Filtres ──────────────────────────────────────────────────────────────
+    min_chars:        2
+    min_confidence:   0.0           # 0 = désactivé (confiance loguée)
+    ignore_words:     ["euh", "heu", "hum", "hmm", "mmh", "bah", "ah", "oh"]
+
+    # ── Micro (ReSpeaker Lite) ───────────────────────────────────────────────
+    mic_device:       "Lite"
+    mic_channels:     1
+    mic_channel_index: 0
+    mic_alsa_card:    ""
+    mic_capture_percent: -1         # -1 = ne pas toucher au gain micro

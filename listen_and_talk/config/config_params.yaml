@@ -1,8 +1,0 @@
-tts_vits_model      : "engines/talk/axel.onnx"
-tts_tokens_path     : "engines/talk/tokens.txt"
-tts_espeak_data_dir : "engines/talk/espeak-ng-data"
-
-ten_vad_engine  : "engines/listen/ten-vad.engine"
-stt_encoder     : "engines/listen/encoder-model.engine"
-stt_decoder     : "engines/listen/decoder_joint.engine"
-stt_vocab_file  : "engines/listen/vocab.txt"

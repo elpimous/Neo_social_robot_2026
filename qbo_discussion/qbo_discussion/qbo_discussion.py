@@ -124,7 +124,7 @@ class NeoRAG:
 class QboDiscussionNode(Node):
     """
     Node ROS2 pour gérer les interactions Q&A via RAG.
-    Écoute /listened, publie sur /tts_input.
+    Écoute /listened, publie sur /to_speak.
     """
     def __init__(self):
         super().__init__('qbo_discussion_node')
@@ -156,9 +156,9 @@ class QboDiscussionNode(Node):
             self.listener_callback,
             10
         )
-        self.publisher = self.create_publisher(String, '/tts_input', 10)
+        self.publisher = self.create_publisher(String, '/to_speak', 10)
 
-        self.get_logger().info("🔍 Node démarré, écoute /listened, publie /tts_input")
+        self.get_logger().info("🔍 Node démarré, écoute /listened, publie /to_speak")
 
     def process_answer(self, raw: str) -> str:
         """

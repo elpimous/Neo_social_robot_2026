@@ -2,20 +2,28 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>listen_and_talk</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="nvidia@todo.todo">nvidia</maintainer>
-  <license>TODO: License declaration</license>
+  <version>2.0.0</version>
+  <description>
+    STT + TTS du robot Néo : deux nodes indépendants (listen_node, talk_node).
+    Parakeet TDT 0.6B v3 + VAD Silero/TEN (sherpa-onnx) ; voix VITS « axel » ;
+    gestion d'écho et barge-in.
+  </description>
+  <maintainer email="elpimous12@gmail.com">Vincent FOUCAULT</maintainer>
+  <author email="elpimous12@gmail.com">Vincent FOUCAULT</author>
+  <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>pkg-config</buildtool_depend>
 
-  <build_depend>rclcpp</build_depend>
-  <build_depend>std_msgs</build_depend>
-  <exec_depend>rclcpp</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>qbo_msgs</depend>
+  <depend>ament_index_cpp</depend>
+  <depend>portaudio19-dev</depend>
+  <depend>libasound2-dev</depend>
 
-  <test_depend>ament_lint_auto</test_depend>
-  <test_depend>ament_lint_common</test_depend>
+  <exec_depend>qbo_tts</exec_depend>  <!-- fournit models/axel.onnx -->
+  <exec_depend>launch_ros</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

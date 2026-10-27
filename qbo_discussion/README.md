@@ -30,7 +30,7 @@ ros2 launch qbo_discussion qbo_discussion.launch.py
 ## Topics
 
 - **Input**: `/listened` (std_msgs/String) - Messages d'entrée à traiter
-- **Output**: `/tts_input` (std_msgs/String) - Réponses générées pour le TTS
+- **Output**: `/to_speak` (std_msgs/String) - Réponses générées pour le TTS
 
 ## Configuration
 
