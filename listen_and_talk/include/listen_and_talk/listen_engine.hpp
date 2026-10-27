@@ -162,6 +162,7 @@ class ListenPipeline {
 
   struct Config {
     std::string vad_model;           // silero_vad.onnx ou ten-vad.onnx
+    std::string vad_type = "auto";   // auto | silero | ten  (auto = d'après le NOM du fichier)
     float vad_threshold = 0.5f;
     float min_silence_s = 0.6f;      // fin de phrase
     float min_speech_s = 0.2f;       // parole mini pour ouvrir un segment
@@ -199,7 +200,16 @@ class ListenPipeline {
   bool init() {
     SherpaOnnxVadModelConfig c;
     std::memset(&c, 0, sizeof(c));
-    const bool ten = cfg_.vad_model.find("ten") != std::string::npos;
+    // Type de VAD : explicite, ou déduit du NOM DE FICHIER uniquement
+    // (le chemin contient "listen_and_talk" → ne jamais chercher "ten" dedans).
+    bool ten = false;
+    if (cfg_.vad_type == "ten") {
+      ten = true;
+    } else if (cfg_.vad_type == "auto") {
+      std::string base = cfg_.vad_model.substr(cfg_.vad_model.find_last_of('/') + 1);
+      for (auto& ch : base) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+      ten = base.rfind("ten-vad", 0) == 0 || base.rfind("ten_vad", 0) == 0;
+    }
 #ifdef LAT_HAS_TEN_VAD
     if (ten) {
       c.ten_vad.model = cfg_.vad_model.c_str();

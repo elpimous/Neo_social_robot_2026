@@ -51,6 +51,7 @@ class ListenNode : public rclcpp::Node {
 
     lat::ListenPipeline::Config pc;
     pc.vad_model = lat::resolve_path(declare_parameter<std::string>("vad_model", M + "silero_vad.onnx"));
+    pc.vad_type = declare_parameter<std::string>("vad_type", "auto");
     pc.vad_threshold = static_cast<float>(declare_parameter<double>("vad_threshold", 0.5));
     pc.min_silence_s = static_cast<float>(declare_parameter<double>("vad_min_silence_s", 0.6));
     pc.min_speech_s = static_cast<float>(declare_parameter<double>("vad_min_speech_s", 0.2));

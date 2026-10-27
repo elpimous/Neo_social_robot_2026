@@ -50,6 +50,7 @@ listen_node:
 
     # ── VAD ──────────────────────────────────────────────────────────────────
     vad_model:        "pkg://listen_and_talk/models/listen/silero_vad.onnx"  # ou ten-vad.onnx
+    vad_type:         "auto"        # auto (d'après le nom du fichier) | silero | ten
     vad_threshold:    0.5
     vad_min_silence_s: 0.6          # silence de fin de phrase
     vad_min_speech_s: 0.2
