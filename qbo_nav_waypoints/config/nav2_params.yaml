@@ -1,0 +1,391 @@
+# =============================================================================
+#  nav2_params.yaml — Néo (QBo) — navigation laser seule (RPLidar A2), ROS2 Humble
+#  Auteur : Vincent FOUCAULT
+#
+#  Philosophie :
+#   * SÉCURITÉ   : vitesse max 0.22 m/s, ralentissement près des obstacles,
+#                  collision_monitor en dernier maillon avant les moteurs.
+#   * CENTRAGE   : grande inflation "douce" sur le costmap global + planner
+#                  Smac2D avec cost_travel_multiplier élevé => le chemin suit
+#                  la vallée de coût minimal, c.-à-d. le MILIEU des portes et
+#                  couloirs. Le contrôleur RPP suit ce chemin fidèlement.
+#   * LIDAR COUPÉ PENDANT LES PAUSES : aucun "expected_update_rate" sur les
+#                  sources laser (sinon Nav2 se déclare en erreur capteur).
+#
+#  Les clés robot_base_frame / base_frame_id / odom_topic / yaml_filename /
+#  cmd_vel_out_topic sont réécrites par le launch (arguments de lancement).
+#
+#  Chaîne des vitesses :
+#   controller_server ─┐
+#   behavior_server  ──┴─> cmd_vel_nav -> velocity_smoother -> cmd_vel_smoothed
+#                         -> collision_monitor -> /qbo_arduqbo/base_ctrl/cmd_vel
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# LOCALISATION
+# -----------------------------------------------------------------------------
+map_server:
+  ros__parameters:
+    use_sim_time: False
+    yaml_filename: "map.yaml"             # réécrit par le launch (arg map:=)
+
+amcl:
+  ros__parameters:
+    use_sim_time: False
+    # Modèle odométrique différentiel — bruit modéré (roues + encodeurs)
+    robot_model_type: "nav2_amcl::DifferentialMotionModel"
+    alpha1: 0.15      # rotation -> bruit rotation
+    alpha2: 0.15      # translation -> bruit rotation
+    alpha3: 0.15      # translation -> bruit translation
+    alpha4: 0.15      # rotation -> bruit translation
+    alpha5: 0.1
+    base_frame_id: "base_footprint"            # réécrit par le launch
+    global_frame_id: "map"
+    odom_frame_id: "odom"
+    scan_topic: scan
+    # Laser (RPLidar A2 : 0.15 m -> 12 m)
+    laser_model_type: "likelihood_field"
+    laser_likelihood_max_dist: 2.0
+    laser_max_range: 12.0
+    laser_min_range: 0.15
+    max_beams: 90
+    sigma_hit: 0.2
+    z_hit: 0.5
+    z_max: 0.05
+    z_rand: 0.5
+    z_short: 0.05
+    lambda_short: 0.1
+    do_beamskip: false
+    beam_skip_distance: 0.5
+    beam_skip_error_threshold: 0.9
+    beam_skip_threshold: 0.3
+    # Filtre particulaire
+    min_particles: 500
+    max_particles: 3000
+    pf_err: 0.05
+    pf_z: 0.99
+    resample_interval: 1
+    recovery_alpha_fast: 0.0
+    recovery_alpha_slow: 0.0
+    # Mises à jour fréquentes en intérieur
+    update_min_d: 0.10
+    update_min_a: 0.15
+    save_pose_rate: 0.5
+    tf_broadcast: true
+    transform_tolerance: 1.0
+    set_initial_pose: false               # la pose initiale est gérée par waypoint_mission
+    always_reset_initial_pose: false
+    first_map_only: false
+
+# -----------------------------------------------------------------------------
+# BT NAVIGATOR (arbre par défaut Humble : replanification 1 Hz + recoveries)
+# -----------------------------------------------------------------------------
+bt_navigator:
+  ros__parameters:
+    use_sim_time: False
+    global_frame: map
+    robot_base_frame: base_footprint           # réécrit par le launch
+    odom_topic: /qbo_arduqbo/base_ctrl/odom                     # réécrit par le launch
+    bt_loop_duration: 10
+    default_server_timeout: 20
+    plugin_lib_names:
+      - nav2_compute_path_to_pose_action_bt_node
+      - nav2_compute_path_through_poses_action_bt_node
+      - nav2_smooth_path_action_bt_node
+      - nav2_follow_path_action_bt_node
+      - nav2_spin_action_bt_node
+      - nav2_wait_action_bt_node
+      - nav2_assisted_teleop_action_bt_node
+      - nav2_back_up_action_bt_node
+      - nav2_drive_on_heading_bt_node
+      - nav2_clear_costmap_service_bt_node
+      - nav2_is_stuck_condition_bt_node
+      - nav2_goal_reached_condition_bt_node
+      - nav2_goal_updated_condition_bt_node
+      - nav2_globally_updated_goal_condition_bt_node
+      - nav2_is_path_valid_condition_bt_node
+      - nav2_initial_pose_received_condition_bt_node
+      - nav2_reinitialize_global_localization_service_bt_node
+      - nav2_rate_controller_bt_node
+      - nav2_distance_controller_bt_node
+      - nav2_speed_controller_bt_node
+      - nav2_truncate_path_action_bt_node
+      - nav2_truncate_path_local_action_bt_node
+      - nav2_goal_updater_node_bt_node
+      - nav2_recovery_node_bt_node
+      - nav2_pipeline_sequence_bt_node
+      - nav2_round_robin_node_bt_node
+      - nav2_transform_available_condition_bt_node
+      - nav2_time_expired_condition_bt_node
+      - nav2_path_expiring_timer_condition
+      - nav2_distance_traveled_condition_bt_node
+      - nav2_single_trigger_bt_node
+      - nav2_goal_updated_controller_bt_node
+      - nav2_is_battery_low_condition_bt_node
+      - nav2_navigate_through_poses_action_bt_node
+      - nav2_navigate_to_pose_action_bt_node
+      - nav2_remove_passed_goals_action_bt_node
+      - nav2_planner_selector_bt_node
+      - nav2_controller_selector_bt_node
+      - nav2_goal_checker_selector_bt_node
+      - nav2_controller_cancel_bt_node
+      - nav2_path_longer_on_approach_bt_node
+      - nav2_wait_cancel_bt_node
+      - nav2_spin_cancel_bt_node
+      - nav2_back_up_cancel_bt_node
+      - nav2_assisted_teleop_cancel_bt_node
+      - nav2_drive_on_heading_cancel_bt_node
+      - nav2_is_battery_charging_condition_bt_node
+
+# -----------------------------------------------------------------------------
+# CONTRÔLEUR — Regulated Pure Pursuit : suit fidèlement le chemin centré,
+# ralentit en virage et près des obstacles (passage de porte), s'aligne sur
+# place avant de partir, détecte la collision sur le chemin.
+# -----------------------------------------------------------------------------
+controller_server:
+  ros__parameters:
+    use_sim_time: False
+    controller_frequency: 20.0
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.5
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 0.5
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["goal_checker"]
+    controller_plugins: ["FollowPath"]
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.25
+      movement_time_allowance: 20.0
+
+    goal_checker:
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.15
+      yaw_goal_tolerance: 0.20
+      stateful: True
+
+    FollowPath:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.22
+      # Look-ahead court : colle au chemin centré dans les portes
+      lookahead_dist: 0.40
+      min_lookahead_dist: 0.25
+      max_lookahead_dist: 0.60
+      lookahead_time: 1.5
+      use_velocity_scaled_lookahead_dist: true
+      transform_tolerance: 0.3
+      # Approche du waypoint en douceur
+      min_approach_linear_velocity: 0.05
+      approach_velocity_scaling_dist: 0.6
+      # Anticollision le long du chemin
+      use_collision_detection: true
+      max_allowed_time_to_collision_up_to_carrot: 1.5
+      # Ralentissement en courbe
+      use_regulated_linear_velocity_scaling: true
+      regulated_linear_scaling_min_radius: 0.9
+      regulated_linear_scaling_min_speed: 0.08
+      # Ralentissement près des obstacles (portes) — doit correspondre au
+      # cost_scaling_factor du costmap LOCAL
+      use_cost_regulated_linear_velocity_scaling: true
+      cost_scaling_dist: 0.40
+      cost_scaling_gain: 1.0
+      inflation_cost_scaling_factor: 3.0
+      # Rotation sur place avant de partir / en fin de trajet
+      use_rotate_to_heading: true
+      rotate_to_heading_min_angle: 0.6
+      rotate_to_heading_angular_vel: 0.6
+      max_angular_accel: 1.5
+      allow_reversing: false
+      max_robot_pose_search_dist: 10.0
+
+# -----------------------------------------------------------------------------
+# COSTMAP LOCAL — fenêtre glissante 3x3 m dans odom
+# -----------------------------------------------------------------------------
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      use_sim_time: False
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      global_frame: odom
+      robot_base_frame: base_footprint         # réécrit par le launch
+      rolling_window: true
+      width: 3
+      height: 3
+      resolution: 0.05
+      robot_radius: 0.20                  # identique à qbo_navigation
+      plugins: ["obstacle_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+        scan:
+          topic: /scan
+          data_type: "LaserScan"
+          marking: True
+          clearing: True
+          max_obstacle_height: 2.0
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.0
+          raytrace_max_range: 6.0
+          raytrace_min_range: 0.0
+          # PAS de expected_update_rate : le lidar est volontairement coupé en pause
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.45
+        cost_scaling_factor: 3.0
+      always_send_full_costmap: True
+
+# -----------------------------------------------------------------------------
+# COSTMAP GLOBAL — carte de la maison + obstacles vus + inflation LARGE et DOUCE
+#
+# Centrage dans une porte : chaque montant crée un gradient de coût décroissant
+# sur 0.75 m. Le coût d'une cellule = MAX des contributions => il est minimal
+# exactement au milieu de l'ouverture. Avec cost_scaling_factor bas (2.5), la
+# pente reste sensible sur toute la largeur d'une porte (0.70–0.90 m) ou d'un
+# couloir, et le planner y trace sa ligne au centre.
+# -----------------------------------------------------------------------------
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      use_sim_time: False
+      update_frequency: 1.0
+      publish_frequency: 1.0
+      global_frame: map
+      robot_base_frame: base_footprint         # réécrit par le launch
+      robot_radius: 0.20
+      resolution: 0.05
+      track_unknown_space: true
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: True
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+        scan:
+          topic: /scan
+          data_type: "LaserScan"
+          marking: True
+          clearing: True
+          max_obstacle_height: 2.0
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.0
+          raytrace_max_range: 6.0
+          raytrace_min_range: 0.0
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.75
+        cost_scaling_factor: 2.5
+      always_send_full_costmap: True
+
+# -----------------------------------------------------------------------------
+# PLANNER — Smac 2D : cost_travel_multiplier élevé = chemin au milieu des
+# passages (doc Nav2 : "plus grand => plus exactement au centre des allées")
+# -----------------------------------------------------------------------------
+planner_server:
+  ros__parameters:
+    use_sim_time: False
+    expected_planner_frequency: 2.0
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_smac_planner/SmacPlanner2D"
+      tolerance: 0.15
+      downsample_costmap: false
+      downsampling_factor: 1
+      allow_unknown: false                # jamais de chemin à travers l'inconnu
+      max_iterations: 1000000
+      max_on_approach_iterations: 1000
+      max_planning_time: 2.0
+      cost_travel_multiplier: 3.0         # <<< centrage (2.0 = léger, 4.0 = très strict)
+      use_final_approach_orientation: false
+      smoother:
+        max_iterations: 1000
+        w_smooth: 0.3
+        w_data: 0.3                       # reste proche du chemin centré
+        tolerance: 1.0e-10
+
+# -----------------------------------------------------------------------------
+# BEHAVIORS (recoveries de l'arbre par défaut)
+# -----------------------------------------------------------------------------
+behavior_server:
+  ros__parameters:
+    use_sim_time: False
+    costmap_topic: local_costmap/costmap_raw
+    footprint_topic: local_costmap/published_footprint
+    cycle_frequency: 10.0
+    behavior_plugins: ["spin", "backup", "drive_on_heading", "wait"]
+    spin:
+      plugin: "nav2_behaviors/Spin"
+    backup:
+      plugin: "nav2_behaviors/BackUp"
+    drive_on_heading:
+      plugin: "nav2_behaviors/DriveOnHeading"
+    wait:
+      plugin: "nav2_behaviors/Wait"
+    global_frame: odom
+    robot_base_frame: base_footprint           # réécrit par le launch
+    transform_tolerance: 0.2
+    simulate_ahead_time: 2.0
+    max_rotational_vel: 0.6
+    min_rotational_vel: 0.25
+    rotational_acc_lim: 1.5
+
+# -----------------------------------------------------------------------------
+# LISSAGE DES VITESSES (accélérations douces = moins de glissement roues,
+# meilleure odométrie sur 2 h)
+# -----------------------------------------------------------------------------
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: False
+    smoothing_frequency: 20.0
+    scale_velocities: False
+    feedback: "OPEN_LOOP"
+    max_velocity: [0.25, 0.0, 0.8]
+    min_velocity: [-0.10, 0.0, -0.8]
+    max_accel: [0.4, 0.0, 1.5]
+    max_decel: [-0.6, 0.0, -2.0]
+    odom_topic: /qbo_arduqbo/base_ctrl/odom                     # réécrit par le launch
+    odom_duration: 0.1
+    deadband_velocity: [0.0, 0.0, 0.0]
+    velocity_timeout: 1.0
+
+# -----------------------------------------------------------------------------
+# COLLISION MONITOR — dernier rempart avant les moteurs.
+# Zones ÉTROITES (largeur robot) pour ne PAS se déclencher sur les montants de
+# porte (porte 0.73 m => montants à ±0.36 m de l'axe).
+# -----------------------------------------------------------------------------
+collision_monitor:
+  ros__parameters:
+    use_sim_time: False
+    base_frame_id: "base_footprint"            # réécrit par le launch
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "cmd_vel_smoothed"
+    cmd_vel_out_topic: "/qbo_arduqbo/base_ctrl/cmd_vel"   # réécrit par le launch
+    transform_tolerance: 0.5
+    source_timeout: 2.0
+    base_shift_correction: True
+    stop_pub_timeout: 2.0
+    polygons: ["PolygonStop", "PolygonSlow"]
+    PolygonStop:
+      type: "polygon"
+      # x avant, y gauche (m) — 10 cm devant le pare-chocs, largeur du robot
+      points: [0.30, 0.20, 0.30, -0.20, 0.0, -0.20, 0.0, 0.20]
+      action_type: "stop"
+      max_points: 3
+      visualize: True
+      polygon_pub_topic: "polygon_stop"
+    PolygonSlow:
+      type: "polygon"
+      points: [0.55, 0.23, 0.55, -0.23, 0.0, -0.23, 0.0, 0.23]
+      action_type: "slowdown"
+      max_points: 3
+      slowdown_ratio: 0.5
+      visualize: True
+      polygon_pub_topic: "polygon_slowdown"
+    observation_sources: ["scan"]
+    scan:
+      type: "scan"
+      topic: "/scan"

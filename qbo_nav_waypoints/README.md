@@ -1,0 +1,124 @@
+# qbo_nav_waypoints — Néo : test d'endurance navigation laser
+
+**Auteur : Vincent FOUCAULT** — ROS2 Humble, Jetson Orin NX, RPLidar A2
+
+Néo boucle sur 5 waypoints de la carte de la maison pendant **2 h** :
+tête verrouillée laser horizontal, lidar en marche pendant les trajets et
+**arrêté pendant chaque pause** (5–30 s aléatoire), passage des portes **au
+milieu**, chaîne de sécurité complète jusqu'aux moteurs.
+
+```
+ros2 launch qbo_nav_waypoints test_moving_laser_on_waypoints.launch.py
+```
+
+---
+
+## 1. Installation (sur le Jetson)
+
+```bash
+sudo apt install ros-humble-navigation2 ros-humble-nav2-bringup
+cd ~/qbo_ws/src && git pull            # ou copie du dossier qbo_nav_waypoints
+cd ~/qbo_ws && colcon build --symlink-install --packages-select qbo_nav_waypoints
+source install/setup.bash
+```
+
+## 2. Config Néo prise en compte (relevée dans le dépôt)
+
+| Élément | Valeur |
+|---|---|
+| Base / odom | `base_footprint`, `/qbo_arduqbo/base_ctrl/odom`, cmd `/qbo_arduqbo/base_ctrl/cmd_vel` |
+| Lidar | `rplidar_node`, `/dev/ttyRpLidar`, 115200, mode Sensitivity, 10 Hz, services `/start_motor` `/stop_motor` |
+| TF laser | statique `base_footprint -> laser` (x 0.10, z 0.20, yaw 180°), comme `qbo_navigation` |
+| Carte | `qbo_navigation/map/map.yaml` |
+| Tête | `qbo_dynamixel` : `/cmd_joints` (JointState), `head_pan_joint` / `head_tilt_joint`, 0 rad = neutre |
+| Rayon robot | 0.20 m |
+
+**Tête et auto torque OFF** : `qbo_dynamixel` coupe le couple après 20 s sans
+commande. La mission renvoie la consigne toutes les 5 s (sans vitesse, pour ne
+pas réécrire `Moving_Speed`) : la tête reste verrouillée pendant les 2 h.
+Ne lance pas `head_tracker_cpp` / `ball_tracking_cpp` / `qbo_faces_tracking`
+pendant le test : ils commanderaient la tête en même temps.
+
+**Prérequis au lancement** : `qbo_startup.launch.py` actif (base + tête), et
+`qbo_navigation/navigation.launch.py` **arrêté** (ce launch le remplace :
+lidar, TF laser, AMCL, Nav2). Si le lidar tourne déjà ailleurs :
+`start_lidar_driver:=false publish_laser_tf:=false`.
+
+## 3. Enregistrer les 5 waypoints
+
+Nav2 lancé (ou juste map_server + RViz), puis :
+
+```bash
+# Clic sur la carte (RViz > "Publish Point") — orientation auto vers le WP suivant
+ros2 run qbo_nav_waypoints record_waypoints --ros-args \
+  -p output:=$HOME/qbo_ws/src/qbo_nav_waypoints/config/waypoints.yaml
+# (puis recompiler, ou passer waypoints:=<fichier> au launch)
+
+# ou : Néo placé physiquement sur chaque point, Entrée à chaque fois
+ros2 run qbo_nav_waypoints record_waypoints --ros-args -p mode:=robot \
+  -p output:=$HOME/qbo_ws/src/qbo_nav_waypoints/config/waypoints.yaml
+```
+
+Évite de poser un waypoint **dans** une porte ou à moins de 40 cm d'un mur.
+
+## 4. Lancer le test
+
+```bash
+ros2 launch qbo_nav_waypoints test_moving_laser_on_waypoints.launch.py
+# options utiles
+#   use_rviz:=true                 visualisation
+#   duration_min:=120              durée
+#   map:=/chemin/autre_carte.yaml
+#   robot_bringup:=$(ros2 pkg prefix qbo_bringup)/share/qbo_bringup/launch/qbo_startup.launch.py
+#                                  si qbo_startup n'est PAS lancé par systemd
+```
+
+Si `initial_pose.enabled: false` → donne la pose avec **2D Pose Estimate**
+dans RViz ; la mission démarre seule dès qu'AMCL est localisé.
+
+**Ctrl+C** = arrêt sécurisé : but annulé, vitesse nulle, lidar arrêté, résumé écrit.
+
+## 5. Séquence d'un cycle
+
+```
+verrou tête ─► laser horizontal (TF) ─► lidar ON + 5 scans frais ─► AMCL OK
+   │
+   └─► [boucle] pré-vol (tête, niveau, scans) ─► clear costmaps ─► NavigateToPose
+          surveillance : timeout | scan > 0.6 s | tête dérive > 4.5° | AMCL perdu
+          ─► arrivée : vitesse 0 ─► LIDAR OFF ─► pause 5–30 s ─► LIDAR ON ─► WP suivant
+```
+
+Arrêts sécurisés (robot immobilisé, lidar coupé) : localisation perdue,
+tête impossible à verrouiller, laser non horizontal, lidar qui ne redémarre
+pas, 3 trajets consécutifs en échec.
+
+## 6. Pourquoi Néo passe les portes au milieu
+
+1. **Costmap global** : inflation 0.75 m, `cost_scaling_factor` 2.5 → chaque
+   montant crée une pente de coût qui couvre toute l'ouverture ; le coût est
+   minimal pile au centre.
+2. **Smac Planner 2D** `cost_travel_multiplier: 3.0` → le chemin suit cette
+   vallée de coût minimal (milieu des portes et couloirs).
+3. **Regulated Pure Pursuit** à look-ahead court → suit le chemin sans couper,
+   ralentit automatiquement près des montants.
+4. **Collision monitor** à zones étroites (largeur du robot) → ne bloque pas
+   dans une porte, stoppe net devant un vrai obstacle.
+
+Réglages : centrage plus strict → `cost_travel_multiplier` 4.0 ; si Néo refuse
+une porte étroite (« no valid path ») → baisser `inflation_radius` global à
+0.6 ou vérifier `robot_radius` et la carte (pixels gris dans l'ouverture).
+
+## 7. Résultats
+
+`~/.ros/qbo_nav_test/nav_test_AAAAMMJJ_HHMMSS.csv` — une ligne par trajet :
+résultat, tentatives, durée, distance odom, recoveries, erreur d'arrivée
+(cm/°), σ AMCL, durée de pause.
+`..._resume.txt` — taux de réussite, distance totale, causes d'échec.
+
+## 8. Notes RPLidar
+
+Le driver `rplidar_ros` expose `/start_motor` et `/stop_motor` (std_srvs/Empty).
+Pendant la pause, le driver peut journaliser des erreurs « grab scan » : c'est
+normal. Aucun `expected_update_rate` n'est configuré dans les costmaps, donc
+Nav2 tolère l'absence de scans à l'arrêt ; c'est le nœud mission qui interdit
+tout mouvement tant que les scans ne sont pas frais.

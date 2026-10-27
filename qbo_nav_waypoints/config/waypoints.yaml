@@ -1,0 +1,27 @@
+# =============================================================================
+#  waypoints.yaml — 5 waypoints sur la carte de la maison (repère "map")
+#  Auteur : Vincent FOUCAULT
+#
+#  >>> À REMPLIR : les valeurs ci-dessous sont des EXEMPLES.
+#      Le plus simple : ros2 run qbo_nav_waypoints record_waypoints
+#      (clic "Publish Point" dans RViz, ou robot placé physiquement)
+#
+#  yaw_deg : orientation d'arrivée (0 = axe x de la carte, sens trigo).
+#  Ordre de passage : WP1 -> WP2 -> ... -> WP5 -> WP1 -> ...
+# =============================================================================
+frame_id: map
+
+# Pose de départ envoyée à AMCL au lancement.
+# enabled: false => le nœud attend un "2D Pose Estimate" dans RViz.
+initial_pose:
+  enabled: false
+  x: 0.0
+  y: 0.0
+  yaw_deg: 0.0
+
+waypoints:
+  - {name: "WP1", x: 0.00, y: 0.00, yaw_deg: 0.0}
+  - {name: "WP2", x: 0.00, y: 0.00, yaw_deg: 0.0}
+  - {name: "WP3", x: 0.00, y: 0.00, yaw_deg: 0.0}
+  - {name: "WP4", x: 0.00, y: 0.00, yaw_deg: 0.0}
+  - {name: "WP5", x: 0.00, y: 0.00, yaw_deg: 0.0}
