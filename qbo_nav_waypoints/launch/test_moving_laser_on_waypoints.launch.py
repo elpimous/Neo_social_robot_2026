@@ -63,6 +63,11 @@ def generate_launch_description():
     lidar_baudrate = LaunchConfiguration('lidar_baudrate')
     lidar_scan_mode = LaunchConfiguration('lidar_scan_mode')
     publish_laser_tf = LaunchConfiguration('publish_laser_tf')
+    tilt_level = LaunchConfiguration('tilt_level_rad')
+    head_cx = LaunchConfiguration('head_center_x')
+    head_cz = LaunchConfiguration('head_center_z')
+    laser_up = LaunchConfiguration('laser_above_center')
+    tilt_sign = LaunchConfiguration('tilt_sign')
     use_rviz = LaunchConfiguration('use_rviz')
     log_level = LaunchConfiguration('log_level')
 
@@ -88,7 +93,19 @@ def generate_launch_description():
         DeclareLaunchArgument('lidar_port', default_value='/dev/ttyRpLidar'),
         DeclareLaunchArgument('lidar_scan_mode', default_value='Sensitivity'),
         DeclareLaunchArgument('publish_laser_tf', default_value='true',
-                              description='TF statique base_footprint -> laser (comme qbo_navigation)'),
+                              description='TF dynamique tête -> laser (head_laser_tf, depuis /joint_states)'),
+        # --- Lidar sur la tête : géométrie + calibration horizontale ---
+        DeclareLaunchArgument('tilt_level_rad', default_value='0.0',
+                              description='Tilt qui met le laser HORIZONTAL (calibrate_head_level). '
+                                          'Sert de consigne de verrouillage ET de zéro de la TF'),
+        DeclareLaunchArgument('head_center_x', default_value='0.10',
+                              description='Centre tête (axes pan/tilt) en avant de base_link (m)'),
+        DeclareLaunchArgument('head_center_z', default_value='0.34',
+                              description='Centre tête au-dessus de base_link (m) — base_link = sol + 0.02'),
+        DeclareLaunchArgument('laser_above_center', default_value='0.13',
+                              description='Centre tête -> plan de mesure du lidar (m)'),
+        DeclareLaunchArgument('tilt_sign', default_value='1.0',
+                              description='-1.0 si un tilt positif fait LEVER la tête'),
         DeclareLaunchArgument('lidar_baudrate', default_value='115200',
                               description='A2M8 : 115200 — A2M12 : 256000'),
         DeclareLaunchArgument('use_rviz', default_value='false'),
@@ -133,14 +150,22 @@ def generate_launch_description():
             'scan_frequency': 10.0,
         }])
 
-    # ------------------------------------------------------- TF laser (valeurs de qbo_navigation)
-    # Lidar sur la base : x 0.10, z 0.20, monté tourné de 180°
+    # ------------------------------------------------------- TF laser DYNAMIQUE
+    # Lidar au sommet de la tête : base_link -> head_pan_link -> head_tilt_link -> laser,
+    # calculée depuis les angles MESURÉS des servos (yaw de montage 180° repris de qbo_navigation)
     laser_tf = Node(
-        package='tf2_ros', executable='static_transform_publisher', name='laser_to_base',
-        condition=IfCondition(publish_laser_tf),
-        arguments=['--x', '0.10', '--y', '0.0', '--z', '0.20',
-                   '--roll', '0', '--pitch', '0', '--yaw', '3.14159',
-                   '--frame-id', base_frame, '--child-frame-id', laser_frame])
+        package='qbo_nav_waypoints', executable='head_laser_tf', name='head_laser_tf',
+        output='screen', condition=IfCondition(publish_laser_tf),
+        parameters=[{
+            'base_frame': 'base_link',
+            'laser_frame': laser_frame,
+            'head_center_x': ParameterValue(head_cx, value_type=float),
+            'head_center_z': ParameterValue(head_cz, value_type=float),
+            'laser_above_center': ParameterValue(laser_up, value_type=float),
+            'laser_yaw': 3.14159,
+            'tilt_level_rad': ParameterValue(tilt_level, value_type=float),
+            'tilt_sign': ParameterValue(tilt_sign, value_type=float),
+        }])
 
     # ------------------------------------------------------- localisation
     localization = GroupAction([
@@ -194,6 +219,7 @@ def generate_launch_description():
             'odom_topic': odom_topic,
             'level.base_frame': base_frame,
             'level.laser_frame': laser_frame,
+            'head.tilt_level_rad': ParameterValue(tilt_level, value_type=float),
         }])
 
     # ------------------------------------------------------- RViz

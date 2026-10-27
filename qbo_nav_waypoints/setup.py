@@ -27,6 +27,8 @@ setup(
         'console_scripts': [
             'waypoint_mission = qbo_nav_waypoints.waypoint_mission:main',
             'record_waypoints = qbo_nav_waypoints.record_waypoints:main',
+            'head_laser_tf = qbo_nav_waypoints.head_laser_tf:main',
+            'calibrate_head_level = qbo_nav_waypoints.calibrate_head_level:main',
         ],
     },
 )

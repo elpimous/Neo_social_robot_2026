@@ -170,9 +170,11 @@ class WaypointMission(Node):
         d('head.joint_states_topic', '/joint_states')
         d('head.joint_names', ['head_pan_joint', 'head_tilt_joint'])
         d('head.lock_positions_rad', [0.0, 0.0])
+        d('head.tilt_joint', 'head_tilt_joint')
+        d('head.tilt_level_rad', float('nan'))   # si fourni (launch) : remplace la consigne tilt
         d('head.speed_rad_s', 0.6)
-        d('head.reach_tolerance_rad', 0.035)
-        d('head.drift_tolerance_rad', 0.08)
+        d('head.reach_tolerance_rad', 0.02)
+        d('head.drift_tolerance_rad', 0.035)
         d('head.republish_hz', 0.2)
         d('head.lock_timeout_s', 10.0)
         d('head.settle_time_s', 1.0)
@@ -180,7 +182,7 @@ class WaypointMission(Node):
         d('level.enabled', True)
         d('level.base_frame', 'base_footprint')
         d('level.laser_frame', 'laser')
-        d('level.tolerance_deg', 2.0)
+        d('level.tolerance_deg', 1.5)
         d('lidar.control_enabled', True)
         d('lidar.stop_during_pause', True)
         d('lidar.start_service', '/start_motor')
@@ -243,6 +245,12 @@ class WaypointMission(Node):
 
         if len(self.p_head_names) != len(self.p_head_lock):
             raise ValueError('head.joint_names et head.lock_positions_rad doivent avoir la même taille')
+        # Le lidar est sur la tête : la consigne tilt = valeur qui met le laser horizontal,
+        # la même que celle utilisée par head_laser_tf (une seule source : arg tilt_level_rad)
+        tilt_level = float(g('head.tilt_level_rad'))
+        tilt_name = g('head.tilt_joint')
+        if not math.isnan(tilt_level) and tilt_name in self.p_head_names:
+            self.p_head_lock[self.p_head_names.index(tilt_name)] = tilt_level
 
     def _load_waypoints(self, path):
         if not path or not os.path.isfile(path):
@@ -415,7 +423,9 @@ class WaypointMission(Node):
         return False
 
     def check_level(self):
-        """Inclinaison (°) du plan laser par rapport à la base, via TF."""
+        """Inclinaison (°) du plan laser par rapport à la base, via TF.
+        Le lidar étant sur la tête, cette TF (head_laser_tf) suit les angles
+        MESURÉS des servos : c'est une vraie mesure d'horizontalité."""
         if not self.p_level_enabled:
             return True, 0.0
         t0 = time.monotonic()
