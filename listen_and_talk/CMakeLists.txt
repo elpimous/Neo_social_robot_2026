@@ -96,8 +96,13 @@ endif()
 # ── Installation ──────────────────────────────────────────────────────────────
 install(TARGETS talk_node listen_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
-install(DIRECTORY models/ DESTINATION share/${PROJECT_NAME}/models
-        PATTERN "README.md" EXCLUDE)
+# models/ n'est pas versionné (cf. .gitignore racine) : créé par get_models.sh
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/models)
+  install(DIRECTORY models/ DESTINATION share/${PROJECT_NAME}/models
+          PATTERN "README.md" EXCLUDE)
+else()
+  message(WARNING "listen_and_talk/models absent : lancer scripts/get_models.sh puis recompiler")
+endif()
 install(PROGRAMS scripts/get_models.sh DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
