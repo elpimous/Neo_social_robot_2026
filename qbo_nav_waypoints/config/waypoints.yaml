@@ -1,12 +1,7 @@
 # =============================================================================
-#  waypoints.yaml — 5 waypoints sur la carte de la maison (repère "map")
-#  Auteur : Vincent FOUCAULT
-#
-#  >>> À REMPLIR : les valeurs ci-dessous sont des EXEMPLES.
-#      Le plus simple : ros2 run qbo_nav_waypoints record_waypoints
-#      (clic "Publish Point" dans RViz, ou robot placé physiquement)
-#
-#  yaw_deg : orientation d'arrivée (0 = axe x de la carte, sens trigo).
+#  waypoints.yaml — 5 waypoints de la maison (repère "map")
+#  Auteur : Vincent FOUCAULT — relevés le 28/10/2026 (record_waypoints)
+#  yaw_deg : orienté vers le waypoint suivant (ignoré en mode fluide sans pause)
 #  Ordre de passage : WP1 -> WP2 -> ... -> WP5 -> WP1 -> ...
 # =============================================================================
 frame_id: map
@@ -20,8 +15,8 @@ initial_pose:
   yaw_deg: 0.0
 
 waypoints:
-  - {name: "WP1", x: 0.00, y: 0.00, yaw_deg: 0.0}
-  - {name: "WP2", x: 0.00, y: 0.00, yaw_deg: 0.0}
-  - {name: "WP3", x: 0.00, y: 0.00, yaw_deg: 0.0}
-  - {name: "WP4", x: 0.00, y: 0.00, yaw_deg: 0.0}
-  - {name: "WP5", x: 0.00, y: 0.00, yaw_deg: 0.0}
+  - {name: "WP1", x: 2.97, y: 3.22, yaw_deg: -57.0}
+  - {name: "WP2", x: 4.50, y: 0.86, yaw_deg: -76.1}
+  - {name: "WP3", x: 4.88, y: -0.67, yaw_deg: -161.0}
+  - {name: "WP4", x: 0.24, y: -2.27, yaw_deg: 121.7}
+  - {name: "WP5", x: -1.30, y: 0.22, yaw_deg: 35.1}

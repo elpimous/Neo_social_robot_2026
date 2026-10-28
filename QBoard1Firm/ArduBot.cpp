@@ -215,7 +215,12 @@ void ArduBot::estimatePosition(float loopPeriodSeconds)
   static const float ODO_ANGULAR_CORRECTION = 1.042874f * 1.0256f;
   float odometryAngularMovement = ODO_ANGULAR_CORRECTION * ArduBot::par_motores.actualAngularMovement;
 
-  float gyroAngularMovement = ((float)gyroZ) * 0.0174533f * loopPeriodSeconds;
+  // vince (28/10/2026) : correction d'échelle du gyro, mesurée sur Néo avec
+  // diagnose_base_lidar (lidar vs odométrie, 2 essais à 60°) : l'odométrie
+  // surestimait les rotations d'environ 11-13 %. Le cap étant à 95 % issu du
+  // gyro, l'erreur décalait la localisation AMCL dans chaque virage.
+  static const float GYRO_SCALE_CORRECTION = 0.88f;
+  float gyroAngularMovement = ((float)gyroZ) * 0.0174533f * GYRO_SCALE_CORRECTION * loopPeriodSeconds;
 
   const float alpha = 0.95f; // 0.98f 
   float angularMovement = alpha * gyroAngularMovement + (1 - alpha) * odometryAngularMovement;

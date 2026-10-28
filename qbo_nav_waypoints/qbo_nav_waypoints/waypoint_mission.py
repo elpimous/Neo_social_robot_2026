@@ -155,7 +155,7 @@ class WaypointMission(Node):
         d('max_laps', 0)
         d('pause_min_s', 5.0)
         d('pause_max_s', 30.0)
-        d('pass_radius_m', 0.40)       # sans pause : waypoint « franchi » à cette distance, on enchaîne sans s'arrêter
+        d('pass_radius_m', 0.45)       # sans pause : waypoint « franchi » à cette distance, on enchaîne sans s'arrêter
         d('random_seed', -1)
         d('start_from_nearest', True)
         d('leg_timeout_s', 240.0)
@@ -645,6 +645,11 @@ class WaypointMission(Node):
         self._goal_handle = None
         status = res_fut.result().status
         if status == GoalStatus.STATUS_SUCCEEDED:
+            # Succès « fantôme » : avec la préemption de Nav2 Humble, le nouveau but peut
+            # hériter du succès de l'ancien. On vérifie qu'on est vraiment arrivé.
+            xy = self.robot_xy()
+            if xy is not None and math.hypot(xy[0] - wp['x'], xy[1] - wp['y']) > max(0.6, 1.5 * self.p_pass_radius):
+                return 'ghost_success'
             return 'success'
         if status == GoalStatus.STATUS_CANCELED:
             return 'canceled'
@@ -811,6 +816,12 @@ class WaypointMission(Node):
                 if attempts > 1 or not self.p_no_pause:
                     self.clear_costmaps()     # pas en plein mouvement fluide
                 result = self.navigate_to(wp, pass_through=pass_through)
+                ghosts = 0
+                while result == 'ghost_success' and ghosts < 3:   # renvoi immédiat, sans compter d'échec
+                    ghosts += 1
+                    result = self.navigate_to(wp, pass_through=pass_through)
+                if result == 'ghost_success':
+                    result = 'aborted'
                 recov_total += self._fb_recoveries
                 if result == 'passed':
                     result = 'success'
