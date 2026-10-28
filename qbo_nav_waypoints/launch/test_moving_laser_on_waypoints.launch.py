@@ -105,9 +105,10 @@ def generate_launch_description():
                               description='Centre tête au-dessus de base_link (m) — base_link = sol + 0.02'),
         DeclareLaunchArgument('laser_above_center', default_value='0.13',
                               description='Centre tête -> plan de mesure du lidar (m)'),
-        DeclareLaunchArgument('laser_yaw', default_value='2.953',
-                              description='Angle de montage du lidar sur la tête (rad), mesuré par '
-                                          'diagnose_base_lidar le 28/10/2026 : +169°'),
+        DeclareLaunchArgument('laser_yaw', default_value='3.14159',
+                              description='Angle de montage du lidar sur la tête (rad). '
+                                          'diagnose_base_lidar le 28/10/2026 : +169° puis +184° '
+                                          '(précision ±8°) => 180°'),
         DeclareLaunchArgument('tilt_sign', default_value='1.0',
                               description='-1.0 si un tilt positif fait LEVER la tête'),
         DeclareLaunchArgument('lidar_baudrate', default_value='115200',

@@ -34,8 +34,8 @@ amcl:
     use_sim_time: False
     # Modèle odométrique différentiel — bruit modéré (roues + encodeurs)
     robot_model_type: "nav2_amcl::DifferentialMotionModel"
-    alpha1: 0.15      # rotation -> bruit rotation
-    alpha2: 0.15      # translation -> bruit rotation
+    alpha1: 0.25      # rotation -> bruit rotation (odom Néo surestime les rotations de ~10 %, gyro)
+    alpha2: 0.20      # translation -> bruit rotation
     alpha3: 0.15      # translation -> bruit translation
     alpha4: 0.15      # rotation -> bruit translation
     alpha5: 0.1

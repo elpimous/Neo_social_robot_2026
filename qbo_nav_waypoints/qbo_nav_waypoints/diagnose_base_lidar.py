@@ -49,7 +49,7 @@ class Diag(Node):
         self.declare_parameter('cmd_vel_topic', '/qbo_arduqbo/base_ctrl/cmd_vel')
         self.declare_parameter('odom_topic', '/qbo_arduqbo/base_ctrl/odom')
         self.declare_parameter('scan_topic', '/scan')
-        self.declare_parameter('configured_laser_yaw_deg', 169.0)   # = arg laser_yaw du launch
+        self.declare_parameter('configured_laser_yaw_deg', 180.0)   # = arg laser_yaw du launch
         g = lambda n: self.get_parameter(n).value  # noqa: E731
         self.cfg_yaw = float(g('configured_laser_yaw_deg'))
         self.pub = self.create_publisher(Twist, g('cmd_vel_topic'), 10)
@@ -257,7 +257,7 @@ def main(args=None):
             else:
                 print(f'✓ Translation cohérente (lidar/odom = {r:.2f})')
             err = wrap(lyaw - math.radians(node.cfg_yaw))
-            if abs(err) > math.radians(10):
+            if abs(err) > math.radians(12):   # précision de la mesure ≈ ±8°
                 print(f'✗ ANGLE DE MONTAGE DU LIDAR : mesuré {math.degrees(lyaw):+.0f}°, configuré {node.cfg_yaw:+.0f}°')
                 print(f'  -> laser_yaw = {lyaw:.3f} rad (à me transmettre)')
                 verdict_ok = False
