@@ -9,8 +9,9 @@ waypoint_mission:
     waypoints_file: ""                 # réécrit par le launch (arg waypoints:=)
     duration_min: 120.0                # durée du test (2 h). Le trajet en cours se termine.
     max_laps: 0                        # 0 = illimité (seule la durée compte)
-    pause_min_s: 5.0                   # pause aléatoire à chaque waypoint
-    pause_max_s: 30.0
+    pause_min_s: 0.0                   # 0/0 = AUCUNE pause : passage fluide d'un waypoint au suivant
+    pause_max_s: 0.0                   # (ex. 5/30 pour des pauses aléatoires, robot arrêté, lidar coupé)
+    pass_radius_m: 0.40                # sans pause : waypoint franchi à 40 cm, on enchaîne sans s'arrêter
     random_seed: -1                    # -1 = aléatoire, sinon reproductible
     start_from_nearest: true           # commence par le waypoint le plus proche
     leg_timeout_s: 240.0               # temps max pour un trajet WP -> WP
@@ -58,7 +59,7 @@ waypoint_mission:
     # ---------------- RPLidar A2 : marche pendant les trajets, arrêt en pause ----------------
     lidar:
       control_enabled: true
-      stop_during_pause: true
+      stop_during_pause: true          # sans effet quand il n'y a pas de pause (lidar toujours actif)
       start_service: "/start_motor"    # std_srvs/Empty (driver rplidar_ros)
       stop_service: "/stop_motor"
       scan_topic: "/scan"

@@ -155,6 +155,7 @@ class WaypointMission(Node):
         d('max_laps', 0)
         d('pause_min_s', 5.0)
         d('pause_max_s', 30.0)
+        d('pass_radius_m', 0.40)       # sans pause : waypoint « franchi » à cette distance, on enchaîne sans s'arrêter
         d('random_seed', -1)
         d('start_from_nearest', True)
         d('leg_timeout_s', 240.0)
@@ -206,6 +207,8 @@ class WaypointMission(Node):
         self.p_max_laps = int(g('max_laps'))
         self.p_pause_min = float(g('pause_min_s'))
         self.p_pause_max = max(float(g('pause_max_s')), self.p_pause_min)
+        self.p_no_pause = self.p_pause_max <= 0.0
+        self.p_pass_radius = float(g('pass_radius_m'))
         self.p_seed = int(g('random_seed'))
         self.p_start_nearest = bool(g('start_from_nearest'))
         self.p_leg_timeout = float(g('leg_timeout_s'))
@@ -541,6 +544,16 @@ class WaypointMission(Node):
                 return False
         return False
 
+    def robot_xy(self):
+        """Position du robot dans la carte (TF map -> base), sinon dernière pose AMCL."""
+        try:
+            tf = self.tf_buffer.lookup_transform(self.frame_id, self.p_base_frame, Time())
+            return tf.transform.translation.x, tf.transform.translation.y
+        except Exception:
+            if self._amcl_pose is not None:
+                return self._amcl_pose.position.x, self._amcl_pose.position.y
+        return None
+
     def nearest_index(self):
         if self._amcl_pose is None:
             return 0
@@ -577,9 +590,11 @@ class WaypointMission(Node):
             pass
         self._goal_handle = None
 
-    def navigate_to(self, wp):
-        """Retourne un statut : success / aborted / canceled / timeout / lidar_stale /
-        head_drift / loc_lost / rejected / send_timeout / shutdown."""
+    def navigate_to(self, wp, pass_through=False):
+        """Retourne un statut : success / passed / aborted / canceled / timeout / lidar_stale /
+        head_drift / loc_lost / rejected / send_timeout / shutdown.
+        pass_through : le waypoint est considéré franchi à pass_radius_m ; le but reste
+        actif (pas d'annulation => pas d'arrêt) et sera remplacé par le suivant."""
         goal = NavigateToPose.Goal()
         goal.pose = self._make_pose(wp)
         self._fb_recoveries = 0
@@ -604,6 +619,10 @@ class WaypointMission(Node):
                 reason = 'lidar_stale'
             elif not self.loc_ok():
                 reason = 'loc_lost'
+            elif pass_through and self._within_pass_radius(wp):
+                # but laissé actif : le suivant le remplace (préemption, sans arrêt) ;
+                # handle conservé pour pouvoir l'annuler si la mission s'arrête ici
+                return 'passed'
             elif self.p_head_enabled:
                 err = self.head_error()
                 if err is not None and err > self.p_head_drift:
@@ -630,6 +649,10 @@ class WaypointMission(Node):
         if status == GoalStatus.STATUS_CANCELED:
             return 'canceled'
         return 'aborted'
+
+    def _within_pass_radius(self, wp):
+        xy = self.robot_xy()
+        return xy is not None and math.hypot(xy[0] - wp['x'], xy[1] - wp['y']) <= self.p_pass_radius
 
     def preflight(self):
         """Tête en place + laser horizontal + scans frais. Lève MissionAbort sinon."""
@@ -777,12 +800,20 @@ class WaypointMission(Node):
             recov_total = 0
             t_leg = time.monotonic()
             d0 = self._odom_dist
+            # Dernier trajet (durée atteinte) : vrai arrêt au waypoint ; sinon passage fluide
+            elapsed_now = time.monotonic() - t_start
+            last_leg = elapsed_now >= duration_s or (self.p_max_laps > 0 and lap >= self.p_max_laps
+                                                     and (idx + 1) % n == start_idx)
+            pass_through = self.p_no_pause and not last_leg
             while attempts < self.p_max_attempts and not self._stop_evt.is_set():
                 attempts += 1
                 self.preflight()
-                self.clear_costmaps()
-                result = self.navigate_to(wp)
+                if attempts > 1 or not self.p_no_pause:
+                    self.clear_costmaps()     # pas en plein mouvement fluide
+                result = self.navigate_to(wp, pass_through=pass_through)
                 recov_total += self._fb_recoveries
+                if result == 'passed':
+                    result = 'success'
                 if result in ('success', 'shutdown'):
                     break
                 self.stats['reasons'][result] = self.stats['reasons'].get(result, 0) + 1
@@ -815,7 +846,7 @@ class WaypointMission(Node):
             if result == 'success':
                 self.stats['ok'] += 1
                 consec_fail = 0
-                log.info(f'Arrivé à {wp["name"]} en {dur:.0f} s, {dist:.1f} m'
+                log.info(f'{"Passé par" if pass_through else "Arrivé à"} {wp["name"]} en {dur:.0f} s, {dist:.1f} m'
                          + (f', erreur {err_xy * 100:.0f} cm / {err_yaw:.0f}°' if err_xy is not None else ''))
             else:
                 self.stats['fail'] += 1
@@ -831,8 +862,10 @@ class WaypointMission(Node):
             elapsed = time.monotonic() - t_start
             mission_over = elapsed >= duration_s or (self.p_max_laps > 0 and lap >= self.p_max_laps
                                                      and (idx + 1) % n == start_idx)
-            if result == 'success':
+            if result == 'success' and (mission_over or not self.p_no_pause):
+                self._cancel_active_goal()
                 self.publish_zero(0.5)
+            if result == 'success' and not self.p_no_pause:
                 self.stop_lidar()
                 pause = self.rng.uniform(self.p_pause_min, self.p_pause_max)
                 if not mission_over:
@@ -852,7 +885,7 @@ class WaypointMission(Node):
                 return f'mission terminée ({elapsed / 60:.1f} min, {lap} tour(s))'
 
             # ---------- Redémarrage pour le trajet suivant ----------
-            if result == 'success' or self.scan_age() > self.p_scan_max_age:
+            if self.scan_age() > self.p_scan_max_age:
                 if not self.start_lidar():
                     raise MissionAbort('lidar ne redémarre pas après la pause')
 
