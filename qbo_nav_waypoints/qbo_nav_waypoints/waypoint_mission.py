@@ -720,6 +720,25 @@ class WaypointMission(Node):
     def _mission(self, t_start):
         log = self.get_logger()
 
+        # Prérequis matériels : base (odom) + tête (/joint_states) = qbo_startup
+        t0 = time.monotonic()
+        last_log = 0.0
+        while True:
+            base_ok = self._last_odom_xy is not None
+            head_ok = (not self.p_head_enabled) or (time.monotonic() - self._head_stamp < 2.0)
+            if base_ok and head_ok:
+                break
+            if time.monotonic() - t0 > 180.0:
+                raise MissionAbort('base ou tête absente depuis 3 min — qbo_startup est-il lancé ?')
+            if time.monotonic() - last_log > 10.0:
+                manque = [n for n, ok in (('base (odom)', base_ok), ('tête (/joint_states)', head_ok)) if not ok]
+                log.warn(f'En attente de : {", ".join(manque)} — lance qbo_startup '
+                         '(ros2 launch qbo_bringup qbo_startup.launch.py)')
+                last_log = time.monotonic()
+            if not self._sleep(0.5):
+                return 'arrêt demandé'
+        log.info('Base et tête présentes')
+
         log.info('Attente du serveur NavigateToPose (Nav2)...')
         while not self.nav_client.wait_for_server(timeout_sec=5.0):
             if self._stop_evt.is_set():
