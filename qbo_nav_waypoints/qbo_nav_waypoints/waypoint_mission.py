@@ -167,7 +167,7 @@ class WaypointMission(Node):
         d('amcl_pose_topic', '/amcl_pose')
         d('initial_pose_timeout_s', 600.0)
         d('loc.check_enabled', True)
-        d('loc.max_xy_std_m', 0.60)
+        d('loc.max_xy_std_m', 0.80)
         d('loc.max_yaw_std_rad', 0.80)
         d('head.enabled', True)
         d('head.command_type', 'joint_state')
@@ -320,7 +320,7 @@ class WaypointMission(Node):
     def _amcl_cb(self, msg: PoseWithCovarianceStamped):
         c = msg.pose.covariance
         self._amcl_pose = msg.pose.pose
-        self._amcl_std_xy = math.sqrt(max(c[0], 0.0) + max(c[7], 0.0))
+        self._amcl_std_xy = math.sqrt(max(c[0], c[7], 0.0))   # σ de l'axe le plus incertain
         self._amcl_std_yaw = math.sqrt(max(c[35], 0.0))
         self._amcl_count += 1
 

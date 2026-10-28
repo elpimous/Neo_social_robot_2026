@@ -28,7 +28,7 @@ waypoint_mission:
     # ---------------- Localisation (sécurité) ----------------
     loc:
       check_enabled: true
-      max_xy_std_m: 0.60               # écart-type AMCL au-delà => robot perdu => arrêt
+      max_xy_std_m: 0.80               # σ AMCL (axe le plus incertain) au-delà => robot perdu => arrêt
       max_yaw_std_rad: 0.80
 
     # ---------------- Tête pan/tilt verrouillée ----------------
