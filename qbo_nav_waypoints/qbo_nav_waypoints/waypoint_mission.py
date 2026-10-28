@@ -88,6 +88,7 @@ class WaypointMission(Node):
         self._amcl_std_xy = float('inf')
         self._amcl_std_yaw = float('inf')
         self._amcl_count = 0
+        self._user_initpose_count = 0
         self._odom_dist = 0.0
         self._last_odom_xy = None
         self._fb_recoveries = 0
@@ -127,6 +128,10 @@ class WaypointMission(Node):
                               durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(PoseWithCovarianceStamped, self.p_amcl_topic, self._amcl_cb,
                                  amcl_qos, callback_group=self.cbg)
+        # "2D Pose Estimate" de RViz : seule pose acceptée pour démarrer (AMCL a une
+        # pose provisoire à l'origine, uniquement pour l'affichage)
+        self.create_subscription(PoseWithCovarianceStamped, '/initialpose', self._initpose_cb, 10,
+                                 callback_group=self.cbg)
 
         if self.p_head_enabled:
             self.create_timer(1.0 / max(self.p_head_rate, 0.05), self._head_timer_cb,
@@ -319,6 +324,10 @@ class WaypointMission(Node):
         self._amcl_std_yaw = math.sqrt(max(c[35], 0.0))
         self._amcl_count += 1
 
+    def _initpose_cb(self, _msg):
+        self._user_initpose_count += 1
+        self._initpose_time = time.monotonic()
+
     def _fb_cb(self, fb_msg):
         try:
             self._fb_recoveries = int(fb_msg.feedback.number_of_recoveries)
@@ -509,12 +518,19 @@ class WaypointMission(Node):
             self.get_logger().info('Pose initiale envoyée à AMCL')
         else:
             timeout = self.p_init_pose_timeout
-            if self._amcl_count == 0:
-                self.get_logger().warn('En attente d\'un "2D Pose Estimate" dans RViz...')
+            self.get_logger().warn('>>> Place Néo dans RViz avec "2D Pose Estimate" (aligne le scan rouge sur les murs)')
+            t0 = time.monotonic()
+            while self._user_initpose_count == 0:
+                if time.monotonic() - t0 > timeout:
+                    return False
+                if not self._sleep(0.2):
+                    return False
+            c0 = self._amcl_count
+            self.get_logger().info('2D Pose Estimate reçu, attente de la convergence AMCL...')
         t0 = time.monotonic()
         last_log = t0
         while time.monotonic() - t0 < timeout:
-            if self._amcl_count > c0 or (self.initial_pose is None and self._amcl_count > 0):
+            if self._amcl_count > c0:
                 self.get_logger().info(
                     f'Localisation OK (σxy={self._amcl_std_xy:.2f} m, σyaw={math.degrees(self._amcl_std_yaw):.0f}°)')
                 return True

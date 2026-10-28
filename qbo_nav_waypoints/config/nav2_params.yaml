@@ -73,7 +73,15 @@ amcl:
     save_pose_rate: 0.5
     tf_broadcast: true
     transform_tolerance: 1.0
-    set_initial_pose: false               # la pose initiale est gérée par waypoint_mission
+    # Pose PROVISOIRE à l'origine de la carte : AMCL publie map->odom dès le
+    # démarrage, donc carte + scan s'affichent tout de suite dans RViz. La
+    # mission ne démarre PAS sur cette pose : elle attend ton "2D Pose Estimate".
+    set_initial_pose: true
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0
     always_reset_initial_pose: false
     first_map_only: false
 

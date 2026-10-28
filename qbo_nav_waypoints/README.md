@@ -102,8 +102,17 @@ ros2 launch qbo_nav_waypoints test_moving_laser_on_waypoints.launch.py tilt_leve
 #                                  si qbo_startup n'est PAS lancé par systemd
 ```
 
-Si `initial_pose.enabled: false` → donne la pose avec **2D Pose Estimate**
-dans RViz ; la mission démarre seule dès qu'AMCL est localisé.
+Au lancement :
+
+- **Tête** : le nœud `head_lock` la verrouille immédiatement (pan 0, tilt
+  `tilt_level_rad`) et la tient en permanence, mission active ou non.
+- **RViz** (`rviz/neo_nav.rviz`) : carte, **scan lidar en rouge**, costmaps,
+  chemin, particules AMCL, zones STOP (rouge) / RALENTI (orange).
+  AMCL démarre sur une pose *provisoire* à l'origine de la carte, pour que le
+  scan s'affiche tout de suite (souvent décalé des murs, c'est normal).
+- Si `initial_pose.enabled: false` → avec **2D Pose Estimate**, clique la
+  vraie position de Néo et glisse dans sa direction, jusqu'à ce que le scan
+  rouge se superpose aux murs. La mission ne démarre **que** sur ce clic.
 
 **Ctrl+C** = arrêt sécurisé : but annulé, vitesse nulle, lidar arrêté, résumé écrit.
 

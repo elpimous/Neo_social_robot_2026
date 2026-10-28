@@ -133,6 +133,13 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(robot_bringup),
         condition=IfCondition(PythonExpression(["'", robot_bringup, "' != ''"])))
 
+    # ------------------------------------------------------- Verrou tête (permanent)
+    # Indépendant de la mission : la tête est tenue dès le lancement, même pendant
+    # l'enregistrement des waypoints ou si la mission s'arrête.
+    head_lock = Node(
+        package='qbo_nav_waypoints', executable='head_lock', name='head_lock', output='screen',
+        parameters=[{'tilt_level_rad': ParameterValue(tilt_level, value_type=float)}])
+
     # ------------------------------------------------------- RPLidar A2
     lidar = Node(
         package='rplidar_ros',
@@ -223,7 +230,7 @@ def generate_launch_description():
         }])
 
     # ------------------------------------------------------- RViz
-    rviz_cfg = os.path.join(get_package_share_directory('nav2_bringup'), 'rviz', 'nav2_default_view.rviz')
+    rviz_cfg = os.path.join(pkg, 'rviz', 'neo_nav.rviz')   # scan rouge, zones collision monitor
     rviz = Node(package='rviz2', executable='rviz2', name='rviz2', output='screen',
                 arguments=['-d', rviz_cfg], condition=IfCondition(use_rviz))
 
@@ -233,6 +240,7 @@ def generate_launch_description():
         *args,
         LogInfo(msg=['[Néo] Test navigation laser — carte : ', map_yaml, ' — waypoints : ', waypoints]),
         bringup,
+        head_lock,
         laser_tf,
         lidar,
         localization,
