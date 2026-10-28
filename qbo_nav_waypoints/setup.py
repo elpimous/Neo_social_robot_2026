@@ -31,6 +31,7 @@ setup(
             'head_laser_tf = qbo_nav_waypoints.head_laser_tf:main',
             'head_lock = qbo_nav_waypoints.head_lock:main',
             'calibrate_head_level = qbo_nav_waypoints.calibrate_head_level:main',
+            'diagnose_base_lidar = qbo_nav_waypoints.diagnose_base_lidar:main',
         ],
     },
 )
