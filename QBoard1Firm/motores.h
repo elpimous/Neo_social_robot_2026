@@ -378,12 +378,18 @@ public:
     // -----------------------------------------------------------------------
     // PID DISCRET — vitesse par roue (gauche et droite indépendants)
     //
-    // Convention : error = reference - actual
-    //   → error > 0 : roue trop lente → PWM positif → on accélère   ✓
-    //   → error < 0 : roue trop rapide → PWM négatif → on freine     ✓
+    // Convention : error = actual - reference   (signe D'ORIGINE TheCorpora)
     //
-    // ⚠️  CORRECTION BUG #1 (Mars 2026) : signe était actual - reference
-    //     → rétroaction POSITIVE : trop lent → PWM négatif → recul → divergence
+    // Sur la QBoard1, la polarité moteur/codeur est inversée : un PWM
+    // POSITIF fait tourner la roue dans le sens où le codeur compte en
+    // NÉGATIF. Le signe actual - reference compense exactement cela et
+    // donne une contre-réaction (boucle stable).
+    //
+    // ⚠️  NE PAS « corriger » en reference - actual : essayé en avril 2026
+    //     (« BUG #1 »), cela crée une rétroaction POSITIVE → les roues partent
+    //     à l'opposé de la consigne (avance → recul, gauche → droite) et la
+    //     base devient incontrôlable (Nav2 tourne sans jamais avancer).
+    //     Rétabli le 28/10/2026 après diagnostic sur Néo.
     //
     // ⚠️  CORRECTION BUG #9 (Mars 2026) : intégrale accumulait l'erreur
     //     du cycle N-1 au lieu du cycle N (lag d'un cycle).
@@ -404,8 +410,8 @@ public:
     double oldRightError = rightError;
 
     // 2. Calculer la nouvelle erreur (cycle courant)
-    leftError  = referenceLeftWheelPulses  - actualLeftWheelPulses;
-    rightError = referenceRightWheelPulses - actualRightWheelPulses;
+    leftError  = actualLeftWheelPulses  - referenceLeftWheelPulses;
+    rightError = actualRightWheelPulses - referenceRightWheelPulses;
 
     // 3. Intégrer l'erreur courante (pas l'ancienne)
     integralLeftError  += leftError;
