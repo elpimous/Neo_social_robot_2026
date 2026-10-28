@@ -27,6 +27,7 @@ import threading
 import time
 
 import rclpy
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import Twist
@@ -48,7 +49,7 @@ class Diag(Node):
         self.declare_parameter('cmd_vel_topic', '/qbo_arduqbo/base_ctrl/cmd_vel')
         self.declare_parameter('odom_topic', '/qbo_arduqbo/base_ctrl/odom')
         self.declare_parameter('scan_topic', '/scan')
-        self.declare_parameter('configured_laser_yaw_deg', 180.0)
+        self.declare_parameter('configured_laser_yaw_deg', 169.0)   # = arg laser_yaw du launch
         g = lambda n: self.get_parameter(n).value  # noqa: E731
         self.cfg_yaw = float(g('configured_laser_yaw_deg'))
         self.pub = self.create_publisher(Twist, g('cmd_vel_topic'), 10)
@@ -161,7 +162,7 @@ class Diag(Node):
     def test_forward(self):
         print('\n[3/3] AVANCE : Néo avance d\'environ 25 cm tout droit...')
         a0, inc, r0 = self.avg_scan()
-        x0, y0, _ = self.pose()
+        x0, y0, th0 = self.pose()
         self.drive(0.12, 0.0, 4.0, lambda: math.hypot(self.pose()[0] - x0, self.pose()[1] - y0) >= 0.25)
         a0b, _, r1 = self.avg_scan()
         x1, y1, _ = self.pose()
@@ -186,8 +187,12 @@ class Diag(Node):
         A = (sxr * syy - syr * sxy) / det
         B = (syr * sxx - sxr * sxy) / det
         d_scan = math.hypot(A, B)
-        phi = math.atan2(-B, -A)          # direction de l'avant du robot dans le repère laser
-        laser_yaw = wrap(-phi)            # yaw du lidar par rapport à la base
+        phi = math.atan2(-B, -A)          # direction du DÉPLACEMENT dans le repère laser (pose de départ)
+        # Direction réelle du déplacement dans le repère robot de départ (odométrie,
+        # cap fusionné gyro) : corrige une trajectoire pas parfaitement droite
+        delta = wrap(math.atan2(y1 - y0, x1 - x0) - th0)
+        laser_yaw = wrap(delta - phi)     # yaw du lidar par rapport à la base
+        print(f'      dérive de cap pendant l\'avance : {math.degrees(delta):+.1f}° (corrigée)')
         print(f'      odométrie : {d_odom * 100:5.1f} cm   |   lidar : {d_scan * 100:5.1f} cm')
         print(f'      avant du robot vu par le lidar à {math.degrees(phi):+.0f}°  =>  laser_yaw mesuré ≈ {math.degrees(laser_yaw):+.0f}°')
         return d_odom, d_scan, laser_yaw
@@ -196,7 +201,10 @@ class Diag(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = Diag()
-    threading.Thread(target=rclpy.spin, args=(node,), daemon=True).start()
+    executor = SingleThreadedExecutor()
+    executor.add_node(node)
+    spin_thread = threading.Thread(target=executor.spin, daemon=True)
+    spin_thread.start()
     print(__doc__.split('\n\n')[1])
     try:
         t0 = time.monotonic()
@@ -263,6 +271,8 @@ def main(args=None):
         print(f'\nErreur : {e}')
     finally:
         node.stop()
+        executor.shutdown()            # arrêt propre du thread de spin (évite « terminate called »)
+        spin_thread.join(timeout=2.0)
         node.destroy_node()
         rclpy.try_shutdown()
 

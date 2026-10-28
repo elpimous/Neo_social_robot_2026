@@ -184,7 +184,7 @@ controller_server:
       use_velocity_scaled_lookahead_dist: true
       transform_tolerance: 0.3
       # Approche du waypoint en douceur
-      min_approach_linear_velocity: 0.05
+      min_approach_linear_velocity: 0.10      # base Néo : ne démarre qu'à partir de ~0.07 m/s (diagnose_base_lidar)
       approach_velocity_scaling_dist: 0.6
       # Anticollision le long du chemin
       use_collision_detection: true
@@ -192,7 +192,7 @@ controller_server:
       # Ralentissement en courbe
       use_regulated_linear_velocity_scaling: true
       regulated_linear_scaling_min_radius: 0.9
-      regulated_linear_scaling_min_speed: 0.08
+      regulated_linear_scaling_min_speed: 0.10  # idem : jamais sous le seuil de démarrage
       # Ralentissement près des obstacles (portes) — doit correspondre au
       # cost_scaling_factor du costmap LOCAL
       use_cost_regulated_linear_velocity_scaling: true
@@ -381,7 +381,7 @@ collision_monitor:
       points: [0.55, 0.23, 0.55, -0.23, 0.0, -0.23, 0.0, 0.23]
       action_type: "slowdown"
       max_points: 3
-      slowdown_ratio: 0.5
+      slowdown_ratio: 0.8                 # 0.10 x 0.8 = 0.08 m/s > seuil de démarrage (0.07)
       visualize: True
       polygon_pub_topic: "polygon_slowdown"
     observation_sources: ["scan"]

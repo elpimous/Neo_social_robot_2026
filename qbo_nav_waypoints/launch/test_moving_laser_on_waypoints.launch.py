@@ -68,6 +68,7 @@ def generate_launch_description():
     head_cz = LaunchConfiguration('head_center_z')
     laser_up = LaunchConfiguration('laser_above_center')
     tilt_sign = LaunchConfiguration('tilt_sign')
+    laser_yaw = LaunchConfiguration('laser_yaw')
     use_rviz = LaunchConfiguration('use_rviz')
     log_level = LaunchConfiguration('log_level')
 
@@ -104,6 +105,9 @@ def generate_launch_description():
                               description='Centre tête au-dessus de base_link (m) — base_link = sol + 0.02'),
         DeclareLaunchArgument('laser_above_center', default_value='0.13',
                               description='Centre tête -> plan de mesure du lidar (m)'),
+        DeclareLaunchArgument('laser_yaw', default_value='2.953',
+                              description='Angle de montage du lidar sur la tête (rad), mesuré par '
+                                          'diagnose_base_lidar le 28/10/2026 : +169°'),
         DeclareLaunchArgument('tilt_sign', default_value='1.0',
                               description='-1.0 si un tilt positif fait LEVER la tête'),
         DeclareLaunchArgument('lidar_baudrate', default_value='115200',
@@ -169,7 +173,7 @@ def generate_launch_description():
             'head_center_x': ParameterValue(head_cx, value_type=float),
             'head_center_z': ParameterValue(head_cz, value_type=float),
             'laser_above_center': ParameterValue(laser_up, value_type=float),
-            'laser_yaw': 3.14159,
+            'laser_yaw': ParameterValue(laser_yaw, value_type=float),
             'tilt_level_rad': ParameterValue(tilt_level, value_type=float),
             'tilt_sign': ParameterValue(tilt_sign, value_type=float),
         }])

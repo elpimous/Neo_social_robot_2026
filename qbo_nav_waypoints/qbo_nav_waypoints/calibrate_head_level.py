@@ -25,6 +25,7 @@ import threading
 import time
 
 import rclpy
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 
@@ -69,7 +70,10 @@ class Calib(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = Calib()
-    threading.Thread(target=rclpy.spin, args=(node,), daemon=True).start()
+    executor = SingleThreadedExecutor()
+    executor.add_node(node)
+    spin_thread = threading.Thread(target=executor.spin, daemon=True)
+    spin_thread.start()
     time.sleep(1.0)
     node.send()
     steps = {'+': 0.5, '-': -0.5, '++': 2.0, '--': -2.0}
@@ -93,6 +97,8 @@ def main(args=None):
     print(f'tilt_level_rad:={t:.4f}   ({math.degrees(t):+.2f}°, valeur MESURÉE par le servo)')
     print('Lance le test avec :')
     print(f'  ros2 launch qbo_nav_waypoints test_moving_laser_on_waypoints.launch.py tilt_level_rad:={t:.4f}')
+    executor.shutdown()
+    spin_thread.join(timeout=2.0)
     node.destroy_node()
     rclpy.try_shutdown()
 
