@@ -47,7 +47,7 @@ amcl:
     laser_model_type: "likelihood_field"
     laser_likelihood_max_dist: 2.0
     laser_max_range: 12.0
-    laser_min_range: 0.15
+    laser_min_range: 0.25                 # ignore les points < 25 cm (support/câbles du lidar sur la tête)
     max_beams: 90
     sigma_hit: 0.2
     z_hit: 0.5
@@ -235,7 +235,7 @@ local_costmap:
           clearing: True
           max_obstacle_height: 2.0
           obstacle_max_range: 4.0
-          obstacle_min_range: 0.0
+          obstacle_min_range: 0.25        # idem : pas d'obstacle fantôme collé au robot
           raytrace_max_range: 6.0
           raytrace_min_range: 0.0
           # PAS de expected_update_rate : le lidar est volontairement coupé en pause
@@ -280,7 +280,7 @@ global_costmap:
           clearing: True
           max_obstacle_height: 2.0
           obstacle_max_range: 4.0
-          obstacle_min_range: 0.0
+          obstacle_min_range: 0.25        # idem : pas d'obstacle fantôme collé au robot
           raytrace_max_range: 6.0
           raytrace_min_range: 0.0
       inflation_layer:
