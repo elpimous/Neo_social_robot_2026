@@ -247,12 +247,14 @@ local_costmap:
       always_send_full_costmap: True
 
 # -----------------------------------------------------------------------------
-# COSTMAP GLOBAL — carte de la maison SEULE + inflation douce
+# COSTMAP GLOBAL — carte de la maison + obstacles vus (meubles déplacés, objets)
 #
-# Pas de couche obstacle ici : les scans faits avant la localisation (pose
-# provisoire) ou pendant une dérive AMCL s'inscrivaient au mauvais endroit et y
-# restaient (obstacles fantômes, "Starting point in lethal space"). Les
-# obstacles réels/mobiles sont gérés par le costmap LOCAL + le collision monitor.
+# La couche obstacle est INDISPENSABLE : sans elle le planner trace son chemin à
+# travers une chaise absente de la carte, le contrôleur s'y bloque (« collision
+# ahead ») et Nav2 replanifie le même chemin en boucle.
+# Anti-fantômes : marquage limité à 2.5 m (erreur de localisation => petit
+# décalage seulement), effacement par raytracing jusqu'à 4 m, costmaps remis à
+# zéro par la mission juste après la localisation initiale.
 #
 # Centrage dans une porte : chaque montant crée un gradient de coût décroissant
 # sur 0.55 m. Le coût d'une cellule = MAX des contributions => il est minimal
@@ -271,10 +273,24 @@ global_costmap:
       robot_radius: 0.20
       resolution: 0.05
       track_unknown_space: true
-      plugins: ["static_layer", "inflation_layer"]
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+        scan:
+          topic: /scan
+          data_type: "LaserScan"
+          marking: True
+          clearing: True
+          max_obstacle_height: 2.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.25
+          raytrace_max_range: 4.0
+          raytrace_min_range: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         inflation_radius: 0.55            # 0.75 saturait la maison (couloirs entièrement en coût fort)

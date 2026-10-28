@@ -793,6 +793,7 @@ class WaypointMission(Node):
         leg = 0
         consec_fail = 0
         duration_s = self.p_duration_min * 60.0
+        self.clear_costmaps()   # efface ce qui a été vu avant la localisation (pose provisoire)
         log.info(f'=== MISSION DÉMARRÉE : premier objectif {self.waypoints[idx]["name"]} ===')
 
         while not self._stop_evt.is_set():
