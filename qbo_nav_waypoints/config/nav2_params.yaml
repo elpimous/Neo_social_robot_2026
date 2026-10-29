@@ -191,7 +191,7 @@ controller_server:
       max_allowed_time_to_collision_up_to_carrot: 1.0
       # Ralentissement en courbe
       use_regulated_linear_velocity_scaling: true
-      regulated_linear_scaling_min_radius: 0.7
+      regulated_linear_scaling_min_radius: 0.5   # ne ralentit que dans les virages vraiment serrés
       regulated_linear_scaling_min_speed: 0.20  # en virage serré : 0.20 m/s minimum
       # Ralentissement près des obstacles (portes) — doit correspondre au
       # cost_scaling_factor du costmap LOCAL
@@ -361,7 +361,7 @@ velocity_smoother:
     feedback: "OPEN_LOOP"
     max_velocity: [0.32, 0.0, 0.7]
     min_velocity: [-0.10, 0.0, -0.7]
-    max_accel: [0.30, 0.0, 1.0]         # accélérations douces = mouvement souple, moins de patinage
+    max_accel: [0.45, 0.0, 1.2]         # reprise plus rapide après un virage (0.20 -> 0.30 m/s en ~0.2 s)
     max_decel: [-0.50, 0.0, -1.5]
     odom_topic: /qbo_arduqbo/base_ctrl/odom                     # réécrit par le launch
     odom_duration: 0.1
