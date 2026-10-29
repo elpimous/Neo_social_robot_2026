@@ -1,8 +1,8 @@
 # =============================================================================
-#  waypoints.yaml — 5 waypoints de la maison (repère "map")
-#  Auteur : Vincent FOUCAULT — relevés le 28/10/2026 (record_waypoints)
+#  waypoints.yaml — 3 waypoints de la maison (repère "map")
+#  Auteur : Vincent FOUCAULT — relevés le 29/10/2026 (record_waypoints)
 #  yaw_deg : orienté vers le waypoint suivant (ignoré en mode fluide sans pause)
-#  Ordre de passage : WP1 -> WP2 -> ... -> WP5 -> WP1 -> ...
+#  Ordre de passage : WP1 -> WP2 -> WP3 -> WP1 -> ...
 # =============================================================================
 frame_id: map
 
@@ -15,8 +15,6 @@ initial_pose:
   yaw_deg: 0.0
 
 waypoints:
-  - {name: "WP1", x: 2.97, y: 3.22, yaw_deg: -57.0}
-  - {name: "WP2", x: 4.50, y: 0.86, yaw_deg: -76.1}
-  - {name: "WP3", x: 4.88, y: -0.67, yaw_deg: -161.0}
-  - {name: "WP4", x: 0.24, y: -2.27, yaw_deg: 121.7}
-  - {name: "WP5", x: -1.30, y: 0.22, yaw_deg: 35.1}
+  - {name: "WP1", x: 4.32, y: 1.78, yaw_deg: -117.4}
+  - {name: "WP2", x: 2.55, y: -1.63, yaw_deg: 155.0}
+  - {name: "WP3", x: -0.37, y: -0.27, yaw_deg: 23.6}
