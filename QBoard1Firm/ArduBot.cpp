@@ -198,6 +198,17 @@ APRÈS les initialisations statiques.** `millis()` retourne 0 dans ce contexte.
 long stopTime = 1000;
 long speedComandTime = 0;
 
+// vince (29/10/2026) : roulis/tangage FILTRÉS pour la sécurité anti-basculement.
+// Calculés à partir de l'accéléromètre brut (8 bits, 18 mg/LSB) toutes les 5 ms,
+// les vibrations des moteurs dépassaient ponctuellement le seuil de 9° (0.16 g).
+// setSpeeds() coupait alors avance ET rotation => freeMotors() (intégrale PID
+// remise à zéro) => le robot ralentissait puis repartait sans cesse.
+// Filtre passe-bas (EMA, alpha 0.98 à 200 Hz => tau ~ 0.25 s) : les pics de
+// vibration disparaissent, un vrai basculement reste détecté en ~0.3 s.
+static float rollFiltered  = 0.0f;
+static float pitchFiltered = 0.0f;
+static const float TILT_FILTER_ALPHA = 0.98f;
+
 void ArduBot::updatePosition(float loopPeriodSeconds)
 {
   long now = millis();
@@ -270,7 +281,7 @@ void ArduBot::setSpeeds(double linear_speed, double angular_speed)
 {
   if (MiddleDist < MIN_FLOOR_DISTANCE_CM || MiddleDist > MAX_FLOOR_DISTANCE_CM)
     if (linear_speed > 0) linear_speed = 0.0;
-  if (abs(roll) > 9 || abs(pitch) > 9) { linear_speed = 0.0; angular_speed = 0.0; }
+  if (fabs(rollFiltered) > 9 || fabs(pitchFiltered) > 9) { linear_speed = 0.0; angular_speed = 0.0; }
   if (LeftDist  < 20 && LeftDist  != 0 && linear_speed > 0) linear_speed = 0.0;
   if (RightDist < 20 && RightDist != 0 && linear_speed > 0) linear_speed = 0.0;
 
@@ -450,6 +461,8 @@ void ArduBot::spinOnce()
     } else {
       roll = pitch = 90.0f;
     }
+    rollFiltered  = TILT_FILTER_ALPHA * rollFiltered  + (1.0f - TILT_FILTER_ALPHA) * roll;
+    pitchFiltered = TILT_FILTER_ALPHA * pitchFiltered + (1.0f - TILT_FILTER_ALPHA) * pitch;
 
     // vince : thetaGyroOnly supprimé — variable jamais utilisée nulle part
     // Anciennement : multiplication flottante inutile à chaque cycle de 5ms
