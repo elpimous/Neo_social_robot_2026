@@ -131,15 +131,50 @@ Si `uptime` est long : seul le Wi-Fi a décroché (le Jetson n'a pas redémarré
 
 ## Outils ponctuels
 
-### Enregistrer de nouveaux waypoints
-Terminal 2 lancé + 2D Pose Estimate fait, puis :
+### Enregistrer X waypoints (nombre libre, minimum 2)
+
+**Prérequis :** terminal 1 (qbo_startup) + terminal 2 (navigation) lancés, RViz ouvert
+(terminal 3) et **2D Pose Estimate fait** (le scan rouge doit coller aux murs).
+
+**Terminal 4 — méthode 1 : clic dans RViz** (remplacer `X` par le nombre voulu) :
 
 ```bash
-ros2 run qbo_nav_waypoints record_waypoints --ros-args -p count:=3 -p output:=$HOME/neo_waypoints.yaml
+cd ~
+source ~/qbo_ws/install/setup.bash
+ros2 run qbo_nav_waypoints record_waypoints --ros-args -p count:=X -p output:=$HOME/neo_waypoints.yaml
 ```
 
-Cliquer les points dans RViz avec **Publish Point**, dans l'ordre de passage
-(≥ 50 cm des murs, jamais dans une porte). Utilisation : `waypoints:=$HOME/neo_waypoints.yaml`.
+Dans RViz, outil **Publish Point** : cliquer les X points **dans l'ordre de passage**.
+L'outil s'arrête seul après le X-ième point et écrit le fichier. L'orientation de chaque point
+est calculée vers le suivant.
+
+**Terminal 4 — méthode 2 : robot placé à la main** (orientation réelle enregistrée) :
+
+```bash
+ros2 run qbo_nav_waypoints record_waypoints --ros-args -p mode:=robot -p count:=X -p output:=$HOME/neo_waypoints.yaml
+```
+
+Déplacer Néo (téléop ou à la main) sur chaque point, puis **Entrée** pour l'enregistrer.
+
+Bonnes pratiques :
+- au moins 50 cm de dégagement autour de chaque point, jamais dans une porte ;
+- points reliés par des passages larges (≥ 70 cm) ;
+- la boucle est fermée automatiquement : WP1 → … → WPX → WP1.
+
+**Vérifier puis utiliser :**
+
+```bash
+cat ~/neo_waypoints.yaml
+ros2 launch qbo_nav_waypoints test_moving_laser_on_waypoints.launch.py waypoints:=$HOME/neo_waypoints.yaml
+```
+
+**En faire les waypoints par défaut** (sans `waypoints:=`) :
+
+```bash
+cp ~/neo_waypoints.yaml ~/qbo_ws/src/qbo_nav_waypoints/config/waypoints.yaml
+```
+
+(⚠️ écrasé à la prochaine mise à jour du package : envoyer le fichier à Claude pour l'intégrer au dépôt GitHub.)
 
 ### Diagnostic base / lidar (odométrie, angle du lidar, seuil de démarrage)
 Terminal 1 + terminal 2 lancés, **aucun objectif en cours**, 1,2 m dégagés devant Néo :
