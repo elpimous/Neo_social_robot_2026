@@ -27,6 +27,7 @@ import os
 import threading
 
 import rclpy
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from geometry_msgs.msg import PointStamped, PoseWithCovarianceStamped
@@ -113,7 +114,9 @@ class WaypointRecorder(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = WaypointRecorder()
-    spin = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
+    executor = SingleThreadedExecutor()
+    executor.add_node(node)
+    spin = threading.Thread(target=executor.spin, daemon=True)
     spin.start()
     try:
         if node.mode == 'robot':
@@ -128,6 +131,8 @@ def main(args=None):
     except (KeyboardInterrupt, EOFError):
         pass
     finally:
+        executor.shutdown()          # arrêt propre du thread (plus de « terminate called »)
+        spin.join(timeout=2.0)
         node.destroy_node()
         rclpy.try_shutdown()
 
