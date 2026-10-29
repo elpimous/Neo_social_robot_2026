@@ -125,6 +125,44 @@ ls -t ~/.ros/qbo_nav_test/                                    # CSV par trajet, 
 
 ---
 
+## Test d'autonomie batterie (pleine → extinction) + tableau de bord graphique
+
+Batterie LiFePO4 4S (13,2 V nominal, 10 Ah) : plateau ~13,0–13,3 V, coude vers 12,0 V
+(3,0 V/cellule), coupure visée 10,5 V. **Partir batterie pleine et chargeur débranché.**
+
+**Terminal 1** : qbo_startup (comme d'habitude).
+
+**Terminal 2** : navigation sans limite de durée (1000 min) :
+
+```bash
+cd ~ && source ~/qbo_ws/install/setup.bash
+ros2 launch qbo_nav_waypoints test_moving_laser_on_waypoints.launch.py duration_min:=1000
+```
+
+**Terminal 3** : RViz pour le 2D Pose Estimate, puis le fermer.
+
+**Terminal 4** : tableau de bord (enregistre aussi tout en CSV, synchronisé disque toutes les 2 s) :
+
+```bash
+cd ~ && source ~/qbo_ws/install/setup.bash
+ros2 run qbo_nav_waypoints neo_dashboard
+```
+
+Puis sur le PC, dans le navigateur : **http://192.168.1.23:8080**
+(batterie + courbe de décharge, carte avec position, trace colorée par la tension et scan
+laser, vitesse, distance, tours, CPU par cœur, GPU, températures, puissance, Wi-Fi, journal).
+Quand Néo s'éteint, la page garde les dernières valeurs et affiche l'heure de la coupure.
+
+**Après recharge et redémarrage**, revoir le test complet :
+
+```bash
+ros2 run qbo_nav_waypoints neo_dashboard --ros-args -p replay:=last
+```
+
+Fichier brut : `ls -t ~/.ros/qbo_nav_test/autonomie_*.csv | head -1` (ou bouton **⇩ CSV** de la page).
+
+---
+
 ## Après un PLANTAGE (Jetson injoignable / redémarré)
 
 ```bash
