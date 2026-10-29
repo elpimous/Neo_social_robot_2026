@@ -15,6 +15,7 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
         (os.path.join('share', package_name, 'rviz'), glob('rviz/*.rviz')),
+        (os.path.join('share', package_name, 'scripts'), glob('scripts/*.sh')),
         (os.path.join('share', package_name, 'maps'),
          glob('maps/*.yaml') + glob('maps/*.pgm') + glob('maps/*.png') + glob('maps/*.md')),
     ],
@@ -32,6 +33,7 @@ setup(
             'head_lock = qbo_nav_waypoints.head_lock:main',
             'calibrate_head_level = qbo_nav_waypoints.calibrate_head_level:main',
             'diagnose_base_lidar = qbo_nav_waypoints.diagnose_base_lidar:main',
+            'neo_monitor = qbo_nav_waypoints.neo_monitor:main',
         ],
     },
 )

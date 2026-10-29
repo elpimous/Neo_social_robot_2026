@@ -69,6 +69,7 @@ def generate_launch_description():
     laser_up = LaunchConfiguration('laser_above_center')
     tilt_sign = LaunchConfiguration('tilt_sign')
     laser_yaw = LaunchConfiguration('laser_yaw')
+    monitor = LaunchConfiguration('monitor')
     use_rviz = LaunchConfiguration('use_rviz')
     log_level = LaunchConfiguration('log_level')
 
@@ -114,6 +115,8 @@ def generate_launch_description():
         DeclareLaunchArgument('lidar_baudrate', default_value='115200',
                               description='A2M8 : 115200 — A2M12 : 256000'),
         DeclareLaunchArgument('use_rviz', default_value='false'),
+        DeclareLaunchArgument('monitor', default_value='true',
+                              description='Boîte noire neo_monitor (~/.ros/qbo_nav_test/blackbox_*.log)'),
         DeclareLaunchArgument('log_level', default_value='info'),
     ]
 
@@ -246,6 +249,9 @@ def generate_launch_description():
         LogInfo(msg=['[Néo] Test navigation laser — carte : ', map_yaml, ' — waypoints : ', waypoints]),
         bringup,
         head_lock,
+        Node(package='qbo_nav_waypoints', executable='neo_monitor', name='neo_monitor',
+             output='screen', condition=IfCondition(monitor),
+             parameters=[{'cmd_vel_topic': cmd_vel_topic, 'odom_topic': odom_topic}]),
         laser_tf,
         lidar,
         localization,

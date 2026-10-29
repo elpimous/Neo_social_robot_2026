@@ -175,7 +175,7 @@ controller_server:
 
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.24
+      desired_linear_vel: 0.30             # vitesse de croisière
       # Look-ahead moyen : trajectoire souple, reste proche du chemin centré dans les portes
       lookahead_dist: 0.55
       min_lookahead_dist: 0.35
@@ -184,18 +184,18 @@ controller_server:
       use_velocity_scaled_lookahead_dist: true
       transform_tolerance: 0.3
       # Approche du waypoint en douceur
-      min_approach_linear_velocity: 0.10      # base Néo : ne démarre qu'à partir de ~0.07 m/s (diagnose_base_lidar)
-      approach_velocity_scaling_dist: 0.4   # ralentit moins tôt avant un waypoint
+      min_approach_linear_velocity: 0.20      # jamais sous 0.20 m/s en approche (demande Vincent)
+      approach_velocity_scaling_dist: 0.3   # ne ralentit qu'au tout dernier moment (fin de mission)
       # Anticollision le long du chemin
       use_collision_detection: true
       max_allowed_time_to_collision_up_to_carrot: 1.0
       # Ralentissement en courbe
       use_regulated_linear_velocity_scaling: true
       regulated_linear_scaling_min_radius: 0.7
-      regulated_linear_scaling_min_speed: 0.10  # idem : jamais sous le seuil de démarrage
+      regulated_linear_scaling_min_speed: 0.20  # en virage serré : 0.20 m/s minimum
       # Ralentissement près des obstacles (portes) — doit correspondre au
       # cost_scaling_factor du costmap LOCAL
-      use_cost_regulated_linear_velocity_scaling: true
+      use_cost_regulated_linear_velocity_scaling: false   # coupé : en intérieur, ralentissait/réaccélérait sans cesse près des murs (effet accordéon)
       cost_scaling_dist: 0.40
       cost_scaling_gain: 1.0
       inflation_cost_scaling_factor: 3.0
@@ -359,7 +359,7 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [0.26, 0.0, 0.7]
+    max_velocity: [0.32, 0.0, 0.7]
     min_velocity: [-0.10, 0.0, -0.7]
     max_accel: [0.30, 0.0, 1.0]         # accélérations douces = mouvement souple, moins de patinage
     max_decel: [-0.50, 0.0, -1.5]
@@ -397,10 +397,10 @@ collision_monitor:
       polygon_pub_topic: "polygon_stop"
     PolygonSlow:
       type: "polygon"
-      points: [0.55, 0.23, 0.55, -0.23, 0.21, -0.23, 0.21, 0.23]
+      points: [0.45, 0.23, 0.45, -0.23, 0.21, -0.23, 0.21, 0.23]   # 24 cm devant : ralentit seulement si obstacle proche
       action_type: "slowdown"
       max_points: 3
-      slowdown_ratio: 0.8                 # 0.10 x 0.8 = 0.08 m/s > seuil de démarrage (0.07)
+      slowdown_ratio: 0.7                 # 0.30 x 0.7 = 0.21 m/s
       visualize: True
       polygon_pub_topic: "polygon_slowdown"
     observation_sources: ["scan"]
