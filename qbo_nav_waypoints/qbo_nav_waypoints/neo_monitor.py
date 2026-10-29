@@ -215,6 +215,24 @@ class NeoMonitor(Node):
         except Exception:
             pass
 
+    def _battery_alert(self, now):
+        """Alerte batterie sans spam : 1 message par palier de 0.2 V (ou toutes les 2 min).
+        La tension en charge oscille de ±0.1 V : on suit le minimum, pas la valeur brute."""
+        v = self.battery_v
+        if v is None:
+            return
+        self.batt_min = min(getattr(self, 'batt_min', v), v)
+        if self.batt_min >= 12.0:
+            return
+        last_v = getattr(self, 'batt_warn_v', None)
+        last_t = getattr(self, 'batt_warn_t', 0.0)
+        if last_v is None or self.batt_min <= last_v - 0.2 or now - last_t > 120.0:
+            self.batt_warn_v, self.batt_warn_t = self.batt_min, now
+            if self.batt_min < 11.0:
+                self.get_logger().error(f'BATTERIE CRITIQUE : {self.batt_min:.1f} V — ARRÊTER ET RECHARGER')
+            else:
+                self.get_logger().warn(f'BATTERIE BASSE : {self.batt_min:.1f} V')
+
     def _tick(self):
         now = time.monotonic()
         used, avail, swap = self._mem()
@@ -227,8 +245,7 @@ class NeoMonitor(Node):
                     f'RAM {used}/{avail} | swap {swap} | {temps} max={tmax:.0f} | P {self._power_w()} | '
                     f'{self._wifi()} | cmd {cmd[0]:+.2f},{cmd[1]:+.2f} | odom {self.odom[0]:+.2f},'
                     f'{self.odom[1]:+.2f} | scan {scan_age}')
-        if self.battery_v is not None and self.battery_v < 12.0:
-            self.get_logger().warn(f'BATTERIE BASSE : {self.battery_v:.2f} V')
+        self._battery_alert(now)
         if tmax > 85.0:
             self.get_logger().warn(f'TEMPÉRATURE ÉLEVÉE : {tmax:.0f} °C')
         if now - self.last_top > 30.0:

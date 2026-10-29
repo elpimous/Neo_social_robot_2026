@@ -94,9 +94,9 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_footprint           # réécrit par le launch
     odom_topic: /qbo_arduqbo/base_ctrl/odom                     # réécrit par le launch
-    bt_loop_duration: 10
+    bt_loop_duration: 20               # 50 Hz : supprime « tick rate 100.00 was exceeded »
     default_nav_to_pose_bt_xml: "neo_navigate_reactive.xml"   # réécrit par le launch (chemin absolu)
-    default_server_timeout: 20
+    default_server_timeout: 100        # 20 ms trop court avec replanif à 4 Hz (« Timed out ... acknowledge goal »)
     plugin_lib_names:
       - nav2_compute_path_to_pose_action_bt_node
       - nav2_compute_path_through_poses_action_bt_node
