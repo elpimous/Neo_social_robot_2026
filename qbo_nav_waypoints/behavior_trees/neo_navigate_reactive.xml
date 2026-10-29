@@ -1,0 +1,46 @@
+<!--
+  neo_navigate_reactive.xml — arbre de navigation de Néo (Nav2 Humble)
+  Auteur : Vincent FOUCAULT
+
+  Dérivé de navigate_w_replanning_and_recovery.xml (Nav2 Humble) :
+   * replanification à 4 Hz au lieu de 1 Hz : contournement d'un obstacle
+     imprévu ~4x plus réactif (le chemin évite l'obstacle dès qu'il est vu)
+   * recoveries adaptées à Néo : attente 2 s (au lieu de 5), recul à 0.10 m/s
+     (la base ne bouge pas sous ~0.07 m/s ; 0.05 m/s d'origine = recul inefficace)
+-->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="6" name="NavigateRecovery">
+      <PipelineSequence name="NavigateWithReplanning">
+        <RateController hz="4.0">
+          <RecoveryNode number_of_retries="1" name="ComputePathToPose">
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+            <ReactiveFallback name="ComputePathToPoseRecoveryFallback">
+              <GoalUpdated/>
+              <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
+            </ReactiveFallback>
+          </RecoveryNode>
+        </RateController>
+        <RecoveryNode number_of_retries="1" name="FollowPath">
+          <FollowPath path="{path}" controller_id="FollowPath"/>
+          <ReactiveFallback name="FollowPathRecoveryFallback">
+            <GoalUpdated/>
+            <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+          </ReactiveFallback>
+        </RecoveryNode>
+      </PipelineSequence>
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <RoundRobin name="RecoveryActions">
+          <Sequence name="ClearingActions">
+            <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
+          </Sequence>
+          <Spin spin_dist="1.57"/>
+          <Wait wait_duration="2"/>
+          <BackUp backup_dist="0.25" backup_speed="0.10"/>
+        </RoundRobin>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

@@ -95,6 +95,7 @@ bt_navigator:
     robot_base_frame: base_footprint           # réécrit par le launch
     odom_topic: /qbo_arduqbo/base_ctrl/odom                     # réécrit par le launch
     bt_loop_duration: 10
+    default_nav_to_pose_bt_xml: "neo_navigate_reactive.xml"   # réécrit par le launch (chemin absolu)
     default_server_timeout: 20
     plugin_lib_names:
       - nav2_compute_path_to_pose_action_bt_node
@@ -157,7 +158,7 @@ controller_server:
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.001
-    failure_tolerance: 3.0               # tolère 3 s de « collision ahead » transitoire avant d'abandonner
+    failure_tolerance: 1.0               # 1 s de « collision ahead » puis relance immédiate avec costmap local nettoyé
     progress_checker_plugin: "progress_checker"
     goal_checker_plugins: ["goal_checker"]
     controller_plugins: ["FollowPath"]
@@ -215,7 +216,7 @@ local_costmap:
   local_costmap:
     ros__parameters:
       use_sim_time: False
-      update_frequency: 5.0
+      update_frequency: 10.0               # = fréquence du lidar : obstacle vu dès le scan suivant
       publish_frequency: 2.0
       global_frame: odom
       robot_base_frame: base_footprint         # réécrit par le launch
@@ -266,7 +267,7 @@ global_costmap:
   global_costmap:
     ros__parameters:
       use_sim_time: False
-      update_frequency: 1.0
+      update_frequency: 5.0                # 1 Hz => obstacle imprévu intégré au chemin avec jusqu'à 1 s de retard
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_footprint         # réécrit par le launch
@@ -304,7 +305,7 @@ global_costmap:
 planner_server:
   ros__parameters:
     use_sim_time: False
-    expected_planner_frequency: 1.0      # = fréquence de replanification de l'arbre BT (1 Hz)
+    expected_planner_frequency: 4.0      # = replanification de l'arbre BT neo_navigate_reactive.xml (4 Hz)
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_smac_planner/SmacPlanner2D"
@@ -314,7 +315,7 @@ planner_server:
       allow_unknown: false                # jamais de chemin à travers l'inconnu
       max_iterations: 1000000
       max_on_approach_iterations: 1000
-      max_planning_time: 2.0
+      max_planning_time: 0.4               # tient la cadence de 4 Hz (la carte est petite : ~20 ms en pratique)
       cost_travel_multiplier: 3.0         # <<< centrage (2.0 = léger, 4.0 = très strict)
       use_final_approach_orientation: false
       smoother:

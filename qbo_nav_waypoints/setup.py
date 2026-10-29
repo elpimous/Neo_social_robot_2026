@@ -16,6 +16,7 @@ setup(
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
         (os.path.join('share', package_name, 'rviz'), glob('rviz/*.rviz')),
         (os.path.join('share', package_name, 'scripts'), glob('scripts/*.sh')),
+        (os.path.join('share', package_name, 'behavior_trees'), glob('behavior_trees/*.xml')),
         (os.path.join('share', package_name, 'maps'),
          glob('maps/*.yaml') + glob('maps/*.pgm') + glob('maps/*.png') + glob('maps/*.md')),
     ],

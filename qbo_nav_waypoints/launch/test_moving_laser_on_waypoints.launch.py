@@ -130,6 +130,7 @@ def generate_launch_description():
             'odom_topic': odom_topic,
             'yaml_filename': map_yaml,
             'cmd_vel_out_topic': cmd_vel_topic,
+            'default_nav_to_pose_bt_xml': os.path.join(pkg, 'behavior_trees', 'neo_navigate_reactive.xml'),
         },
         convert_types=True)
 
