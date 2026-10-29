@@ -249,6 +249,8 @@ def generate_launch_description():
         LogInfo(msg=['[Néo] Test navigation laser — carte : ', map_yaml, ' — waypoints : ', waypoints]),
         bringup,
         head_lock,
+        Node(package='qbo_nav_waypoints', executable='scan_range_filter', name='scan_range_filter',
+             output='screen', parameters=[{'min_range': 0.25}]),
         Node(package='qbo_nav_waypoints', executable='neo_monitor', name='neo_monitor',
              output='screen', condition=IfCondition(monitor),
              parameters=[{'cmd_vel_topic': cmd_vel_topic, 'odom_topic': odom_topic}]),

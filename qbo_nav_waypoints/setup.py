@@ -34,6 +34,8 @@ setup(
             'calibrate_head_level = qbo_nav_waypoints.calibrate_head_level:main',
             'diagnose_base_lidar = qbo_nav_waypoints.diagnose_base_lidar:main',
             'neo_monitor = qbo_nav_waypoints.neo_monitor:main',
+            'scan_range_filter = qbo_nav_waypoints.scan_range_filter:main',
+            'speed_trace = qbo_nav_waypoints.speed_trace:main',
         ],
     },
 )

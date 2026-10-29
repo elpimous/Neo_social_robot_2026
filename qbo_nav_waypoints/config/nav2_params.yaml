@@ -406,4 +406,4 @@ collision_monitor:
     observation_sources: ["scan"]
     scan:
       type: "scan"
-      topic: "/scan"
+      topic: "/scan_filtered"      # scan sans les points < 25 cm (support/câbles du lidar) — scan_range_filter
