@@ -96,6 +96,14 @@ cd ~
 source ~/qbo_ws/install/setup.bash
 ```
 
+**Suivre les waypoints et les erreurs en direct** (vert = waypoint atteint, jaune = WARN, rouge = ERROR) :
+
+```bash
+ros2 run qbo_nav_waypoints nav_trace
+```
+
+Copie automatique dans `~/.ros/qbo_nav_test/trace_*.log`. Erreurs seulement : `ros2 run qbo_nav_waypoints nav_trace --ros-args -p warnings:=false`.
+
 | But | Commande |
 |---|---|
 | Fluidité : vitesse à chaque étage (30 s) | `ros2 run qbo_nav_waypoints speed_trace` |
