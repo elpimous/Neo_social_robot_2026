@@ -162,6 +162,18 @@ Puis sur le PC, dans le navigateur : **http://192.168.1.23:8080**
 laser, vitesse, distance, tours, CPU par cœur, GPU, températures, puissance, Wi-Fi, journal).
 Quand Néo s'éteint, la page garde les dernières valeurs et affiche l'heure de la coupure.
 
+**Filmer la page du tableau de bord en vidéo (25 i/s), sur le PC ROG** :
+
+```bash
+# une seule fois
+python3 -m venv ~/neo_rec && ~/neo_rec/bin/pip install playwright && ~/neo_rec/bin/playwright install --with-deps chromium
+curl -o ~/record_dashboard.py https://raw.githubusercontent.com/elpimous/Neo_social_robot_2026/main/qbo_nav_waypoints/scripts/record_dashboard.py
+# à chaque test (Ctrl+C pour arrêter)
+~/neo_rec/bin/python ~/record_dashboard.py --taille 1920x1080
+```
+
+Vidéo : `~/Vidéos/neo_dashboard_*.mp4` (page entière mise à l'échelle dans l'image).
+
 **Après recharge et redémarrage**, revoir le test complet :
 
 ```bash
