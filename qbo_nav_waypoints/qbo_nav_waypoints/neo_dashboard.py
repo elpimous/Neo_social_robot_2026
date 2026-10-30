@@ -40,6 +40,12 @@ from urllib.parse import parse_qs, urlparse
 
 import yaml
 
+try:
+    import cv2
+    import numpy as np
+except ImportError:  # pragma: no cover
+    cv2 = None
+
 import rclpy
 import rclpy.executors
 from rclpy.node import Node
@@ -49,7 +55,7 @@ from diagnostic_msgs.msg import DiagnosticArray
 from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import Log
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import Image, LaserScan
 from tf2_ros import Buffer, TransformListener
 
 try:
@@ -236,6 +242,9 @@ class NeoDashboard(Node):
         d('cutoff_v', 10.5)                                # LiFePO4 4S : 2.6 V/cellule
         d('knee_v', 12.0)                                  # coude de décharge (3.0 V/cellule)
         d('slope_window_min', 10.0)
+        d('camera_topic', '/inverted_eye_image')
+        d('camera_fps', 5.0)                               # images/s envoyées au navigateur
+        d('camera_width', 480)                             # largeur max du flux (px)
         g = lambda n: self.get_parameter(n).value  # noqa: E731
         self.port = int(g('port'))
         self.period = float(g('period_s'))
@@ -243,6 +252,15 @@ class NeoDashboard(Node):
         self.base_frame, self.laser_frame = g('base_frame'), g('laser_frame')
         self.cutoff, self.knee = float(g('cutoff_v')), float(g('knee_v'))
         self.slope_win = float(g('slope_window_min')) * 60.0
+        self.cam_topic = g('camera_topic')
+        self.cam_fps = max(0.5, float(g('camera_fps')))
+        self.cam_w = int(g('camera_width'))
+        self.cam_msg = None
+        self.cam_t = 0.0
+        self.cam_times = deque(maxlen=30)
+        self.cam_jpg = None
+        self.cam_jpg_t = -1.0
+        self.cam_lock = threading.Lock()
         os.makedirs(self.log_dir, exist_ok=True)
 
         self.lock = threading.Lock()
@@ -342,6 +360,10 @@ class NeoDashboard(Node):
         self.create_subscription(LaserScan, '/scan', self._scan_cb, qos_profile_sensor_data)
         self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self._amcl_cb, latched)
         self.create_subscription(Log, '/rosout', self._rosout_cb, QoSProfile(depth=200))
+        if cv2 is not None:
+            self.create_subscription(Image, self.cam_topic, self._cam_cb, qos_profile_sensor_data)
+        else:
+            self._add_event('WARN', 'dashboard', 'OpenCV absent : pas de retour caméra')
 
         stamp = self.start_wall.strftime('%Y%m%d_%H%M%S')
         self.csv_path = os.path.join(self.log_dir, f'autonomie_{stamp}.csv')
@@ -424,6 +446,52 @@ class NeoDashboard(Node):
         self.ev_seen[key] = now
         with self.lock:
             self.events.append({'t': datetime.now().strftime('%H:%M:%S'), 'lvl': level, 'node': node, 'msg': txt})
+
+    # ------------------------------------------------------------------ caméra
+    def _cam_cb(self, m):
+        now = time.monotonic()
+        self.cam_times.append(now)
+        self.cam_msg, self.cam_t = m, now          # simple référence : encodage seulement à la demande
+
+    def cam_jpeg(self):
+        """JPEG de la dernière image (mis en cache : un seul encodage par image, quel que soit le nb de clients)."""
+        with self.cam_lock:
+            m, t = self.cam_msg, self.cam_t
+            if m is None:
+                return None
+            if t == self.cam_jpg_t:
+                return self.cam_jpg
+            try:
+                enc = m.encoding.lower()
+                ch = {'bgr8': 3, 'rgb8': 3, 'mono8': 1, 'bgra8': 4, 'rgba8': 4}.get(enc)
+                if ch is None:
+                    return self.cam_jpg
+                a = np.frombuffer(bytes(m.data), np.uint8).reshape(m.height, m.step)[:, :m.width * ch]
+                img = a.reshape(m.height, m.width, ch) if ch > 1 else a.reshape(m.height, m.width)
+                if enc == 'rgb8':
+                    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                elif enc == 'rgba8':
+                    img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
+                elif enc == 'bgra8':
+                    img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+                if m.width > self.cam_w:
+                    img = cv2.resize(img, (self.cam_w, int(m.height * self.cam_w / m.width)),
+                                     interpolation=cv2.INTER_AREA)
+                ok, buf = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                if ok:
+                    self.cam_jpg, self.cam_jpg_t = buf.tobytes(), t
+                    self.cam_res = f'{m.width}x{m.height}'
+            except Exception as e:  # noqa: BLE001
+                self.get_logger().warn(f'Image caméra illisible : {e}', throttle_duration_sec=30.0)
+            return self.cam_jpg
+
+    def cam_info(self):
+        now = time.monotonic()
+        ts = [t for t in self.cam_times if now - t < 3.0]
+        hz = round((len(ts) - 1) / (ts[-1] - ts[0]), 1) if len(ts) > 1 and ts[-1] > ts[0] else None
+        return {'topic': self.cam_topic, 'hz': hz, 'res': getattr(self, 'cam_res', None),
+                'age': (round(now - self.cam_t, 1) if self.cam_msg is not None else None),
+                'stream_fps': self.cam_fps, 'available': cv2 is not None and self.mode == 'live'}
 
     # ------------------------------------------------------------------ TF
     def _lookup(self, target, source):
@@ -576,6 +644,7 @@ class NeoDashboard(Node):
                 out.update(self.live)
                 out['pose'] = self.pose
                 out['scan'] = self.scan_pts
+                out['cam'] = self.cam_info()
                 out['elapsed'] = time.monotonic() - self.t0
                 out['start'] = self.start_wall.strftime('%d/%m/%Y %H:%M:%S')
             else:
@@ -613,6 +682,27 @@ class NeoDashboard(Node):
                 self.end_headers()
                 self.wfile.write(data)
 
+            def _mjpeg(self):
+                """Flux MJPEG : le navigateur l'affiche directement dans une balise <img>."""
+                if node.mode != 'live':
+                    self.send_error(404)
+                    return
+                self.send_response(200)
+                self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=neoframe')
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                last = None
+                period = 1.0 / node.cam_fps
+                while rclpy.ok():
+                    t0 = time.monotonic()
+                    jpg = node.cam_jpeg()
+                    if jpg is not None and jpg is not last:
+                        self.wfile.write(b'--neoframe\r\nContent-Type: image/jpeg\r\nContent-Length: '
+                                         + str(len(jpg)).encode() + b'\r\n\r\n' + jpg + b'\r\n')
+                        self.wfile.flush()
+                        last = jpg
+                    time.sleep(max(0.02, period - (time.monotonic() - t0)))
+
             def do_GET(self):
                 u = urlparse(self.path)
                 try:
@@ -625,6 +715,14 @@ class NeoDashboard(Node):
                         self._send(json.dumps(node.api_history(since)))
                     elif u.path == '/api/static':
                         self._send(json.dumps({'map': node.map, 'wps': node.wps}))
+                    elif u.path == '/cam.mjpg':
+                        self._mjpeg()
+                    elif u.path == '/cam.jpg':
+                        jpg = node.cam_jpeg() if node.mode == 'live' else None
+                        if jpg:
+                            self._send(jpg, 'image/jpeg')
+                        else:
+                            self.send_error(404)
                     elif u.path == '/api/csv':
                         with open(node.csv_path, 'rb') as f:
                             self._send(f.read(), 'text/csv', {
@@ -696,6 +794,15 @@ transition:width .8s}
 .glab{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--dim);margin-top:4px}
 canvas{width:100%;display:block}
 .chart{height:230px}.mapc{height:520px}
+.cam{position:relative;background:#05070a;border:1px solid var(--line);border-radius:8px;overflow:hidden;aspect-ratio:4/3}
+.cam img{width:100%;height:100%;object-fit:contain;display:block}
+.cam .none{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:12px var(--mono);color:var(--dim)}
+.cam .rec{position:absolute;top:10px;left:38px;font:600 11px var(--mono);color:var(--bad);letter-spacing:.1em}
+.cam .rec::before{content:"● ";animation:blink 1.2s infinite}
+.cam .hud{position:absolute;bottom:10px;right:38px;font:11px var(--mono);color:var(--acc);text-shadow:0 0 4px #000}
+.cam::after{content:"";position:absolute;inset:0;pointer-events:none;
+background:linear-gradient(var(--acc),var(--acc)) left 12px top 12px/18px 2px no-repeat,linear-gradient(var(--acc),var(--acc)) left 12px top 12px/2px 18px no-repeat,
+linear-gradient(var(--acc),var(--acc)) right 12px bottom 12px/18px 2px no-repeat,linear-gradient(var(--acc),var(--acc)) right 12px bottom 12px/2px 18px no-repeat;opacity:.7}
 .tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .tile{background:#0a0f16;border:1px solid var(--line);border-radius:8px;padding:10px 12px}
 .tile .l{font:11px var(--mono);color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
@@ -753,15 +860,22 @@ font:600 14px var(--mono);box-shadow:0 0 40px rgba(248,113,113,.25)}
     <span><i style="background:var(--mag)"></i>coude 3.0 V/cellule</span></div>
   </section>
 
-  <section class="card c7">
-    <h2>Position · trace colorée par la tension</h2>
+  <section class="card c4">
+    <h2>Position</h2>
     <div class="ovl" id="mapov"></div>
     <canvas id="cmap" class="mapc"></canvas>
-    <div class="legend"><span><i style="background:var(--ok)"></i>batterie pleine</span>
-    <span><i style="background:var(--bad)"></i>batterie vide</span><span><i style="background:#ff4d6d"></i>scan laser</span>
+    <div class="legend"><span><i style="background:var(--ok)"></i>trace : batterie pleine</span>
+    <span><i style="background:var(--bad)"></i>vide</span><span><i style="background:#ff4d6d"></i>scan laser</span>
     <span><i style="background:var(--acc)"></i>waypoints</span></div>
   </section>
-  <section class="card c5">
+  <section class="card c4">
+    <h2>Caméra œil</h2>
+    <div class="ovl" id="camov"></div>
+    <div class="cam"><img id="camimg" alt=""><div class="none" id="camnone">en attente d'image…</div>
+      <span class="rec" id="camrec" style="display:none">LIVE</span><span class="hud" id="camhud"></span></div>
+    <div class="kv" id="camk"></div>
+  </section>
+  <section class="card c4">
     <h2>Mouvement</h2>
     <div class="tiles">
       <div class="tile"><div class="l">vitesse</div><div class="v" id="mv">–<small> m/s</small></div></div>
@@ -881,9 +995,10 @@ function drawMap(){const cv=$('cmap');const[g,W,Hh]=setupCanvas(cv);const m=ST&&
   g.shadowColor=css('--acc');g.shadowBlur=18;g.fillStyle='rgba(51,224,200,.18)';g.strokeStyle=css('--acc');g.lineWidth=2;
   g.beginPath();g.arc(0,0,r,0,7);g.fill();g.stroke();g.beginPath();g.moveTo(r*1.8,0);g.lineTo(-r*.5,r*.7);g.lineTo(-r*.5,-r*.7);g.closePath();
   g.fillStyle=css('--acc');g.fill();g.restore();
-  $('mapov').innerHTML=`x ${fmt(p.x)} m · y ${fmt(p.y)} m · ${fmt(p.yaw*57.2958,0)}° <br>repère ${p.frame}`}
+  $('mapov').textContent=`x ${fmt(p.x)} · y ${fmt(p.y)} m · ${fmt(p.yaw*57.2958,0)}° (${p.frame})`}
 }
 
+function p0(){const p=LIVE&&LIVE.pose;const b=LIVE&&LIVE.batt;return(p?`x ${fmt(p.x)} y ${fmt(p.y)} · `:'')+(b&&(b.vf??b.v)!=null?`${fmt(b.vf??b.v)} V`:'')}
 function setBar(id,pct){$(id).style.width=Math.max(0,Math.min(100,pct||0))+'%'}
 
 function render(){
@@ -917,6 +1032,18 @@ function render(){
  $('sysk').innerHTML=[['puissance',s.p_w==null?'n/a':fmt(s.p_w,1)+' W'],...tk.map(k=>[k,fmt(t[k],1)+' °C']),
   ['charge moy.',(s.load||[]).join(' ')],['swap',s.swap!=null?s.swap+' Mo':'–'],['uptime',dur(s.uptime_s)],['disque libre',s.disk_gb!=null?s.disk_gb+' Go':'–']]
   .map(([a,c])=>`<span>${a}</span><span>${c}</span>`).join('');
+ // caméra
+ const cm=L.cam||{};const img=$('camimg');
+ if(L.mode!=='live'){$('camnone').textContent='pas de caméra en replay';img.style.display='none'}
+ else if(cm.available===false){$('camnone').textContent='OpenCV absent sur Néo'}
+ else{if(!img.dataset.on){img.dataset.on=1;img.onload=()=>{$('camnone').style.display='none';$('camrec').style.display=''};
+   img.onerror=()=>{delete img.dataset.on;$('camrec').style.display='none'};img.src='/cam.mjpg?'+Date.now()}
+  const stale=cm.age==null||cm.age>2;$('camrec').style.display=stale?'none':'';
+  if(cm.age==null){$('camnone').style.display='';$('camnone').textContent=`aucune image sur ${cm.topic||'?'}`}
+  $('camhud').textContent=`${p0()}`}
+ $('camov').textContent=cm.topic||'';
+ $('camk').innerHTML=[['source',cm.hz==null?'–':fmt(cm.hz,1)+' i/s'],['flux navigateur',cm.stream_fps?cm.stream_fps+' i/s':'–'],
+  ['résolution',cm.res||'–'],['âge image',cm.age==null?'–':fmt(cm.age,1)+' s']].map(([a,c])=>`<span>${a}</span><span>${c}</span>`).join('');
  // journal
  $('ev').innerHTML=(L.events||[]).slice().reverse().map(e=>{const ok=/Passé par|Arrivé/.test(e.msg)?' ok':'';
   return`<div class="${e.lvl}${ok}"><span class="t">${e.t}</span> ${e.node==='waypoint_mission'?'':'['+e.node+'] '}${e.msg.replace(/</g,'&lt;')}</div>`}).join('');
