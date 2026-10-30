@@ -29,7 +29,9 @@ import json
 import math
 import os
 import re
+import shutil
 import socket
+import subprocess
 import statistics
 import threading
 import time
@@ -245,6 +247,8 @@ class NeoDashboard(Node):
         d('camera_topic', '/inverted_eye_image')
         d('camera_fps', 5.0)                               # images/s envoyées au navigateur
         d('camera_width', 480)                             # largeur max du flux (px)
+        d('record_video', False)                           # enregistre la caméra œil en vidéo
+        d('record_fps', 10.0)
         g = lambda n: self.get_parameter(n).value  # noqa: E731
         self.port = int(g('port'))
         self.period = float(g('period_s'))
@@ -261,6 +265,9 @@ class NeoDashboard(Node):
         self.cam_jpg = None
         self.cam_jpg_t = -1.0
         self.cam_lock = threading.Lock()
+        self.rec_on = bool(g('record_video'))
+        self.rec_fps = max(1.0, float(g('record_fps')))
+        self.rec = None
         os.makedirs(self.log_dir, exist_ok=True)
 
         self.lock = threading.Lock()
@@ -376,6 +383,11 @@ class NeoDashboard(Node):
         self.create_timer(0.5, self._scan_tick)
         self.create_timer(self.period, self._sample)
         self.create_timer(10.0, self._console)
+        if self.rec_on:
+            if cv2 is None:
+                self.get_logger().error('record_video : OpenCV absent, pas d\'enregistrement vidéo')
+            else:
+                self.create_timer(1.0 / self.rec_fps, self._rec_tick)
         self._add_event('INFO', 'dashboard', f'Enregistrement : {self.csv_path}')
 
     # ------------------------------------------------------------------ callbacks
@@ -462,18 +474,9 @@ class NeoDashboard(Node):
             if t == self.cam_jpg_t:
                 return self.cam_jpg
             try:
-                enc = m.encoding.lower()
-                ch = {'bgr8': 3, 'rgb8': 3, 'mono8': 1, 'bgra8': 4, 'rgba8': 4}.get(enc)
-                if ch is None:
+                img = self._to_bgr(m)
+                if img is None:
                     return self.cam_jpg
-                a = np.frombuffer(bytes(m.data), np.uint8).reshape(m.height, m.step)[:, :m.width * ch]
-                img = a.reshape(m.height, m.width, ch) if ch > 1 else a.reshape(m.height, m.width)
-                if enc == 'rgb8':
-                    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                elif enc == 'rgba8':
-                    img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
-                elif enc == 'bgra8':
-                    img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
                 if m.width > self.cam_w:
                     img = cv2.resize(img, (self.cam_w, int(m.height * self.cam_w / m.width)),
                                      interpolation=cv2.INTER_AREA)
@@ -484,6 +487,89 @@ class NeoDashboard(Node):
             except Exception as e:  # noqa: BLE001
                 self.get_logger().warn(f'Image caméra illisible : {e}', throttle_duration_sec=30.0)
             return self.cam_jpg
+
+    @staticmethod
+    def _to_bgr(m):
+        """sensor_msgs/Image -> tableau BGR (None si encodage non géré)."""
+        enc = m.encoding.lower()
+        ch = {'bgr8': 3, 'rgb8': 3, 'mono8': 1, 'bgra8': 4, 'rgba8': 4}.get(enc)
+        if ch is None:
+            return None
+        a = np.frombuffer(bytes(m.data), np.uint8).reshape(m.height, m.step)[:, :m.width * ch]
+        img = a.reshape(m.height, m.width, ch) if ch > 1 else a.reshape(m.height, m.width)
+        conv = {'rgb8': cv2.COLOR_RGB2BGR, 'rgba8': cv2.COLOR_RGBA2BGR, 'bgra8': cv2.COLOR_BGRA2BGR,
+                'mono8': cv2.COLOR_GRAY2BGR}.get(enc)
+        return cv2.cvtColor(img, conv) if conv is not None else img
+
+    # ------------------------------------------------------------------ enregistrement vidéo
+    def _rec_open(self, w, h):
+        """ffmpeg -> MP4 fragmenté (lisible même si Néo s'éteint d'un coup),
+        sinon OpenCV -> AVI MJPEG découpé en fichiers de 2 min."""
+        stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        if shutil.which('ffmpeg'):
+            path = os.path.join(self.log_dir, f'video_{stamp}.mp4')
+            for codec in (['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '26'],
+                          ['-c:v', 'mpeg4', '-q:v', '5']):
+                cmd = ['ffmpeg', '-loglevel', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24',
+                       '-s', f'{w}x{h}', '-r', f'{self.rec_fps:g}', '-i', '-'] + codec + [
+                       '-pix_fmt', 'yuv420p', '-g', str(int(self.rec_fps * 2)),
+                       '-movflags', '+frag_keyframe+empty_moov+default_base_moof', path]
+                p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                time.sleep(0.5)
+                if p.poll() is None:
+                    self.rec = {'kind': 'ffmpeg', 'proc': p, 'size': (w, h), 'path': path}
+                    break
+        if self.rec is None:
+            path = os.path.join(self.log_dir, f'video_{stamp}.avi')
+            wr = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'MJPG'), self.rec_fps, (w, h))
+            self.rec = {'kind': 'avi', 'writer': wr, 'size': (w, h), 'path': path, 't0': time.monotonic()}
+        self.get_logger().info(f'Vidéo caméra enregistrée dans {self.rec["path"]} ({self.rec["kind"]})')
+        self._add_event('INFO', 'dashboard', f'Vidéo : {self.rec["path"]}')
+
+    def _rec_tick(self):
+        m = self.cam_msg
+        if m is None:
+            return
+        try:
+            img = self._to_bgr(m)
+            if img is None:
+                return
+            if self.rec is None:
+                self._rec_open(img.shape[1], img.shape[0])
+            w, h = self.rec['size']
+            if (img.shape[1], img.shape[0]) != (w, h):
+                img = cv2.resize(img, (w, h))
+            else:
+                img = img.copy()
+            self._overlay(img, stale=time.monotonic() - self.cam_t > 2.0)
+            if self.rec['kind'] == 'ffmpeg':
+                self.rec['proc'].stdin.write(img.tobytes())
+            else:
+                self.rec['writer'].write(img)
+                if time.monotonic() - self.rec['t0'] > 120.0:     # nouveau fichier toutes les 2 min
+                    self.rec['writer'].release()
+                    self.rec = None
+        except Exception as e:  # noqa: BLE001
+            self.get_logger().warn(f'Enregistrement vidéo : {e}', throttle_duration_sec=30.0)
+
+    def _overlay(self, img, stale=False):
+        """Incruste heure, durée, batterie, position, vitesse et progression sur l'image."""
+        lv, pose = self.live or {}, self.pose
+        b, mo = lv.get('batt', {}), lv.get('motion', {})
+        el = time.monotonic() - self.t0
+        vf = b.get('vf') or b.get('v')
+        l1 = f'NEO  {datetime.now().strftime("%d/%m %H:%M:%S")}  T+{int(el // 3600)}:{int(el % 3600 // 60):02d}:{int(el % 60):02d}'
+        l2 = (f'{vf:.2f} V  ' if vf else '? V  ') + (f'x {pose["x"]:+.2f} y {pose["y"]:+.2f}  ' if pose else '') \
+            + f'{mo.get("v", 0.0):.2f} m/s  {mo.get("dist", 0.0):.0f} m  WP {mo.get("wps", 0)} tour {mo.get("laps", 0)}'
+        h = img.shape[0]
+        cv2.rectangle(img, (0, h - 46), (img.shape[1], h), (0, 0, 0), -1)
+        for txt, y, col in ((l1, h - 28, (200, 224, 51)), (l2, h - 8, (255, 255, 255))):
+            cv2.putText(img, txt, (8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, col, 1, cv2.LINE_AA)
+        if stale:
+            cv2.putText(img, 'IMAGE FIGEE', (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (80, 80, 255), 2, cv2.LINE_AA)
+        else:
+            cv2.circle(img, (16, 18), 6, (60, 60, 255), -1)
+            cv2.putText(img, 'REC', (28, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (60, 60, 255), 2, cv2.LINE_AA)
 
     def cam_info(self):
         now = time.monotonic()
@@ -744,6 +830,16 @@ class NeoDashboard(Node):
         if self.mode == 'live':
             self._sync()
             self.csv_f.close()
+        if self.rec:
+            try:
+                if self.rec['kind'] == 'ffmpeg':
+                    self.rec['proc'].stdin.close()
+                    self.rec['proc'].wait(timeout=10)
+                else:
+                    self.rec['writer'].release()
+                print(f'Vidéo : {self.rec["path"]}', flush=True)
+            except Exception:
+                pass
 
 
 LEVEL = {10: 'DEBUG', 20: 'INFO', 30: 'WARN', 40: 'ERROR', 50: 'FATAL'}

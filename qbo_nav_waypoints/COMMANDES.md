@@ -148,6 +148,15 @@ cd ~ && source ~/qbo_ws/install/setup.bash
 ros2 run qbo_nav_waypoints neo_dashboard
 ```
 
+Avec **enregistrement vidéo de la caméra œil** (heure, tension, position, vitesse, tours incrustés) :
+
+```bash
+ros2 run qbo_nav_waypoints neo_dashboard --ros-args -p record_video:=true
+```
+
+Vidéo : `~/.ros/qbo_nav_test/video_*.mp4` (MP4 fragmenté : reste lisible même si Néo s'éteint d'un coup).
+Récupérer sur le PC : `scp nvidia@192.168.1.23:~/.ros/qbo_nav_test/video_*.mp4 ~/Vidéos/`
+
 Puis sur le PC, dans le navigateur : **http://192.168.1.23:8080**
 (batterie + courbe de décharge, carte avec position, trace colorée par la tension et scan
 laser, vitesse, distance, tours, CPU par cœur, GPU, températures, puissance, Wi-Fi, journal).
