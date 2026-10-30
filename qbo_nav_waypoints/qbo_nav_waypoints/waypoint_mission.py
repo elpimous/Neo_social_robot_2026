@@ -429,9 +429,13 @@ class WaypointMission(Node):
             if not self._sleep(0.1):
                 return False
         err = self.head_error()
+        detail = ', '.join(
+            f'{n} : mesuré {math.degrees(self._head_pos[n]):+.1f}° / consigne {math.degrees(t):+.1f}°'
+            for n, t in zip(self.p_head_names, self.p_head_lock) if n in self._head_pos)
         self.get_logger().error(
             'Tête : position de verrouillage NON atteinte '
-            + (f'(erreur {math.degrees(err):.1f}°)' if err is not None else '(aucun retour /joint_states)'))
+            + (f'(erreur {math.degrees(err):.1f}° — {detail})' if err is not None
+               else '(aucun retour /joint_states)'))
         return False
 
     def check_level(self):
