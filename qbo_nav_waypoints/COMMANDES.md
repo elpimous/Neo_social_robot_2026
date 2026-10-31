@@ -125,6 +125,28 @@ ls -t ~/.ros/qbo_nav_test/                                    # CSV par trajet, 
 
 ---
 
+## Néo autonome (promenade libre, regard vivant)
+
+Néo choisit seul ses waypoints, s'arrête 5 à 10 s en regardant autour de lui, et tourne la tête
+vers où il va en roulant (proportionnel au virage). Réglages : `config/autonomous_params.yaml`.
+
+**Terminal 1** : qbo_startup. **Terminal 2** (tableau de bord, optionnel) : `ros2 run qbo_nav_waypoints neo_dashboard`.
+
+**Terminal 3** :
+
+```bash
+cd ~ && source ~/qbo_ws/install/setup.bash
+ros2 launch qbo_nav_waypoints neo_autonomous.launch.py
+```
+
+Options : `duration_min:=60` (0 = illimité), `waypoints:=$HOME/neo_waypoints.yaml`, `tilt_level_rad:=0.0123`.
+
+**Terminal 4** : RViz → 2D Pose Estimate → fermer RViz. Néo regarde vers sa destination puis part.
+
+Journal des trajets : `~/.ros/qbo_nav_test/autonome_*.csv`. Arrêt : `Ctrl+C` (tête recentrée, lidar arrêté).
+
+---
+
 ## Test d'autonomie batterie (pleine → extinction) + tableau de bord graphique
 
 Batterie LiFePO4 4S (13,2 V nominal, 10 Ah) : plateau ~13,0–13,3 V, coude vers 12,0 V

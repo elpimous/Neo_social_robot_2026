@@ -39,6 +39,7 @@ setup(
             'speed_trace = qbo_nav_waypoints.speed_trace:main',
             'nav_trace = qbo_nav_waypoints.nav_trace:main',
             'neo_dashboard = qbo_nav_waypoints.neo_dashboard:main',
+            'neo_autonomous = qbo_nav_waypoints.neo_autonomous:main',
         ],
     },
 )

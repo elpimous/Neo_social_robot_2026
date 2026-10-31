@@ -1,0 +1,53 @@
+# =============================================================================
+#  autonomous_params.yaml — Néo se promène seul (nœud neo_autonomous)
+#  Auteur : Vincent FOUCAULT
+# =============================================================================
+neo_autonomous:
+  ros__parameters:
+    leg_timeout_s: 240.0
+    max_consecutive_failures: 4          # au-delà : arrêt sécurisé
+    random_seed: -1                      # -1 = aléatoire
+
+    # ---------- Pause : « regarde autour de lui » ----------
+    pause:
+      min_s: 5.0
+      max_s: 10.0
+      look_back_prob: 0.2                # probabilité d'un regard vers d'où il vient
+      fix_min_s: 0.6                     # durée d'une fixation du regard
+      fix_max_s: 2.0
+      min_saccade_deg: 15.0              # amplitude mini d'un coup d'œil
+      micro_deg: 2.5                     # petits ajustements pendant une fixation
+      look_next_s: 1.5                   # regard vers la prochaine destination avant de repartir
+
+    # ---------- Tête (pan seulement, tilt fixe à l'horizontale) ----------
+    head:
+      pan_limit_deg: 60.0                # ménage le câble du cou (servo : ±70°)
+      max_speed_deg_s: 60.0              # lidar sur la tête : plus vite, le scan se déforme
+      lookahead_m: 0.8                   # point du chemin regardé en roulant
+      gain: 1.0                          # pan = gain x angle du virage (1.0 = regarde exactement le point)
+      smoothing_s: 0.35                  # filtre : plus grand = tête plus « paresseuse »
+      near_goal_m: 0.35                  # près du but : la tête revient de face
+      max_error_deg: 12.0                # écart consigne/mesure toléré (au-delà : alerte)
+
+    # ---------- Allure ----------
+    speed:
+      cruise_min: 0.22                   # vitesse de croisière tirée à chaque trajet
+      cruise_max: 0.30
+      narrow_speed: 0.20                 # dans un passage étroit
+      narrow_width_m: 0.85               # obstacles gauche + droite plus proches que ça => étroit
+      absolute_min: 0.20                 # jamais en dessous (zone morte de la base ~0.07 m/s)
+
+    # ---------- Batterie LiFePO4 4S (tensions mesurées EN ROULAGE) ----------
+    # >>> À AFFINER avec la courbe du test d'autonomie
+    battery:
+      enabled: true
+      tired_v: 12.7                      # en dessous : plus lent, pauses plus longues
+      low_v: 12.2                        # en dessous : retour au point de repos et arrêt
+      tired_speed_factor: 0.85
+      tired_pause_factor: 1.6
+      rest_waypoint: ""                  # "" = premier waypoint du fichier
+
+    # ---------- Sécurités ----------
+    safety:
+      max_scan_age_s: 1.0
+      max_loc_std_m: 0.8

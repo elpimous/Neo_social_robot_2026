@@ -72,6 +72,8 @@ def generate_launch_description():
     monitor = LaunchConfiguration('monitor')
     use_rviz = LaunchConfiguration('use_rviz')
     log_level = LaunchConfiguration('log_level')
+    use_head_lock = LaunchConfiguration('head_lock')
+    use_mission = LaunchConfiguration('mission')
 
     args = [
         DeclareLaunchArgument('map', default_value=default_map,
@@ -118,6 +120,10 @@ def generate_launch_description():
         DeclareLaunchArgument('monitor', default_value='true',
                               description='Boîte noire neo_monitor (~/.ros/qbo_nav_test/blackbox_*.log)'),
         DeclareLaunchArgument('log_level', default_value='info'),
+        DeclareLaunchArgument('head_lock', default_value='true',
+                              description='Verrou permanent de la tête (false : tête pilotée par neo_autonomous)'),
+        DeclareLaunchArgument('mission', default_value='true',
+                              description='Mission waypoints (false : neo_autonomous la remplace)'),
     ]
 
     # ------------------------------------------------- param rewriting (Nav2)
@@ -147,6 +153,7 @@ def generate_launch_description():
     # l'enregistrement des waypoints ou si la mission s'arrête.
     head_lock = Node(
         package='qbo_nav_waypoints', executable='head_lock', name='head_lock', output='screen',
+        condition=IfCondition(use_head_lock),
         parameters=[{'tilt_level_rad': ParameterValue(tilt_level, value_type=float)}])
 
     # ------------------------------------------------------- RPLidar A2
@@ -226,6 +233,7 @@ def generate_launch_description():
         executable='waypoint_mission',
         name='waypoint_mission',
         output='screen',
+        condition=IfCondition(use_mission),
         emulate_tty=True,
         sigterm_timeout='15',
         parameters=[mission_params, {

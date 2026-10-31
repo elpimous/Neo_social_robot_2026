@@ -437,7 +437,7 @@ class NeoDashboard(Node):
         if name == self.get_name():
             return
         txt = m.msg
-        if name == 'waypoint_mission':
+        if name in ('waypoint_mission', 'neo_autonomous'):
             mt = re.search(r'Trajet (\d+) \(tour (\d+)\)', txt)
             if mt:
                 self.legs, self.laps = int(mt.group(1)), int(mt.group(2))
@@ -445,7 +445,7 @@ class NeoDashboard(Node):
             if mp:
                 self.wps_passed += 1
                 self.last_wp = mp.group(2).rstrip(',')
-            if mp or m.level >= 30 or 'Fin' in txt or 'Mission' in txt:
+            if mp or m.level >= 30 or 'Fin' in txt or 'fin' in txt or 'Mission' in txt or 'Pause' in txt:
                 self._add_event(LEVEL.get(m.level, 'INFO'), name, txt)
         elif m.level >= 30 and 'collision ahead' not in txt and 'tick rate' not in txt:
             self._add_event(LEVEL.get(m.level, 'WARN'), name, txt)
@@ -1142,7 +1142,7 @@ function render(){
   ['résolution',cm.res||'–'],['âge image',cm.age==null?'–':fmt(cm.age,1)+' s']].map(([a,c])=>`<span>${a}</span><span>${c}</span>`).join('');
  // journal
  $('ev').innerHTML=(L.events||[]).slice().reverse().map(e=>{const ok=/Passé par|Arrivé/.test(e.msg)?' ok':'';
-  return`<div class="${e.lvl}${ok}"><span class="t">${e.t}</span> ${e.node==='waypoint_mission'?'':'['+e.node+'] '}${e.msg.replace(/</g,'&lt;')}</div>`}).join('');
+  return`<div class="${e.lvl}${ok}"><span class="t">${e.t}</span> ${(e.node==='waypoint_mission'||e.node==='neo_autonomous')?'':'['+e.node+'] '}${e.msg.replace(/</g,'&lt;')}</div>`}).join('');
  drawAll()}
 
 function drawAll(){

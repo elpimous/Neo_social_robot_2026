@@ -173,7 +173,7 @@ int main(int argc, char **argv)
                         double vel      = std::min(msg->velocity[i], s.max_speed);
                         int speed_ticks = hardware->radPerSecToDxlSpeed(vel);
 
-                        RCLCPP_INFO(node->get_logger(),
+                        RCLCPP_DEBUG(node->get_logger(),   // DEBUG : la tête est pilotée à 20 Hz (neo_autonomous)
                             "Moving_Speed servo %d -> %.2f rad/s (req=%.1f max=%.1f) -> %d ticks",
                             sid, vel, msg->velocity[i], s.max_speed, speed_ticks);
 
@@ -183,7 +183,7 @@ int main(int argc, char **argv)
                                 "Moving_Speed failed servo %d: %s", sid, log ? log : "unknown");
                     }
 
-                    RCLCPP_INFO(node->get_logger(),
+                    RCLCPP_DEBUG(node->get_logger(),
                         "cmd %s -> %.3f rad -> tick %d", s.name.c_str(), msg->position[i], goal);
 
                     const char * log = nullptr;
