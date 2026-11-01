@@ -42,7 +42,7 @@ amcl:
     base_frame_id: "base_footprint"            # réécrit par le launch
     global_frame_id: "map"
     odom_frame_id: "odom"
-    scan_topic: scan
+    scan_topic: /scan_filtered        # scan redressé (rotation de la tête) — scan_range_filter
     # Laser (RPLidar A2 : 0.15 m -> 12 m)
     laser_model_type: "likelihood_field"
     laser_likelihood_max_dist: 2.0
@@ -231,7 +231,7 @@ local_costmap:
         enabled: True
         observation_sources: scan
         scan:
-          topic: /scan
+          topic: /scan_filtered    # scan redressé (rotation de la tête) — scan_range_filter
           data_type: "LaserScan"
           marking: True
           clearing: True
@@ -283,7 +283,7 @@ global_costmap:
         enabled: True
         observation_sources: scan
         scan:
-          topic: /scan
+          topic: /scan_filtered    # scan redressé (rotation de la tête) — scan_range_filter
           data_type: "LaserScan"
           marking: True
           clearing: True

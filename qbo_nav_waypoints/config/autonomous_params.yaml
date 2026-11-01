@@ -22,7 +22,7 @@ neo_autonomous:
     # ---------- Tête (pan seulement, tilt fixe à l'horizontale) ----------
     head:
       pan_limit_deg: 60.0                # ménage le câble du cou (servo : ±70°)
-      max_speed_deg_s: 60.0              # lidar sur la tête : plus vite, le scan se déforme
+      max_speed_deg_s: 45.0              # lidar sur la tête (scan redressé par scan_range_filter)
       lookahead_m: 0.8                   # point du chemin regardé en roulant
       gain: 1.0                          # pan = gain x angle du virage (1.0 = regarde exactement le point)
       smoothing_s: 0.35                  # filtre : plus grand = tête plus « paresseuse »

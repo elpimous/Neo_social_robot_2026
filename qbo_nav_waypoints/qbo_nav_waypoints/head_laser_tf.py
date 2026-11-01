@@ -85,6 +85,7 @@ class HeadLaserTF(Node):
         self.pan = None
         self.tilt = None
         self.last_js = 0.0
+        self.js_stamp = None
         self._warned = False
 
         self.br = TransformBroadcaster(self)
@@ -102,6 +103,12 @@ class HeadLaserTF(Node):
                 self.tilt = p
         if self.pan is not None and self.tilt is not None:
             self.last_js = time.monotonic()
+            # TF horodatée à l'instant de la MESURE des servos (et non à la publication) :
+            # quand la tête tourne, AMCL / costmaps retrouvent l'angle exact au moment du scan.
+            st = msg.header.stamp
+            if st.sec > 0 and (self.js_stamp is None or (st.sec, st.nanosec) > self.js_stamp):
+                self.js_stamp = (st.sec, st.nanosec)
+                self._send(st)
 
     def _tf(self, stamp, parent, child, xyz, rpy):
         t = TransformStamped()
@@ -122,7 +129,11 @@ class HeadLaserTF(Node):
         if self._warned:
             self.get_logger().info('/joint_states tête reçu : TF laser publiée')
             self._warned = False
-        stamp = self.get_clock().now().to_msg()
+        if self.js_stamp is not None:
+            return                       # /joint_states horodaté : TF déjà envoyée à chaque mesure
+        self._send(self.get_clock().now().to_msg())
+
+    def _send(self, stamp):
         pan = self.pan_sign * self.pan
         pitch = self.tilt_sign * (self.tilt - self.tilt_level)
         self.br.sendTransform([

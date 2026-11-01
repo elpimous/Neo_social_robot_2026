@@ -110,7 +110,7 @@ class NeoAutonomous(Node):
         d('head.tilt_joint', 'head_tilt_joint')
         d('head.tilt_level_rad', 0.0)          # réécrit par le launch
         d('head.pan_limit_deg', 60.0)          # ménage le câble du cou
-        d('head.max_speed_deg_s', 60.0)        # lidar sur la tête : au-delà le scan se déforme
+        d('head.max_speed_deg_s', 45.0)        # lidar sur la tête : scan redressé (deskew), vitesse modérée
         d('head.rate_hz', 20.0)
         d('head.lookahead_m', 0.8)
         d('head.gain', 1.0)                    # pan = gain x angle du virage
@@ -176,10 +176,11 @@ class NeoAutonomous(Node):
         # état tête
         self.head_mode = 'hold'                # hold / travel / move
         self.head_cmd = 0.0                    # dernière consigne de pan envoyée
-        self.head_hold = 0.0
+        self.head_hold_pos = 0.0
         self.mv = None                         # mouvement min-jerk en cours (p0, p1, t0, T)
         self.head_pub_t = 0.0
         self.head_lock = threading.Lock()
+        self._head_bad_since = None
 
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -361,7 +362,7 @@ class NeoAutonomous(Node):
 
     def head_hold(self, pan):
         with self.head_lock:
-            self.head_hold = pan
+            self.head_hold_pos = pan
             self.head_mode = 'hold'
 
     def _travel_target(self):
@@ -396,22 +397,30 @@ class NeoAutonomous(Node):
                 s = (now - t0) / T
                 pan = p0 + (p1 - p0) * min_jerk(s)
                 if s >= 1.0:
-                    self.head_mode, self.head_hold, self.mv = 'hold', p1, None
+                    self.head_mode, self.head_hold_pos, self.mv = 'hold', p1, None
             elif mode == 'travel':
                 want = self._travel_target()
                 a = dt / (float(self.P['head.smoothing_s']) + dt)
                 step = max(-self.head_vmax * dt, min(self.head_vmax * dt, (want - cmd) * a))
                 pan = cmd + step
             else:
-                pan = self.head_hold
+                pan = self.head_hold_pos
         moving = abs(pan - cmd) > math.radians(0.2)
         if moving or now - self.head_pub_t > 1.0:      # au repos : 1 consigne/s (évite l'auto torque off)
             self._publish_head(pan, self.head_vmax * 1.3)
 
-    def head_ok(self):
-        if self.js_pan is None or time.monotonic() - self.js_t > 1.0:
+    def head_ok(self, persist_s=0.0):
+        """Vrai si la tête suit sa consigne. persist_s > 0 : faux seulement si l'écart dure."""
+        now = time.monotonic()
+        if self.js_pan is None or now - self.js_t > 1.0:
             return False
-        return abs(self.js_pan - self.head_cmd) < math.radians(float(self.P['head.max_error_deg']))
+        good = abs(self.js_pan - self.head_cmd) < math.radians(float(self.P['head.max_error_deg']))
+        if good:
+            self._head_bad_since = None
+            return True
+        if self._head_bad_since is None:
+            self._head_bad_since = now
+        return now - self._head_bad_since < persist_s
 
     # ================================================================== pause « regarde autour »
     def look_around(self, duration, came_from, next_wp):
@@ -528,7 +537,7 @@ class NeoAutonomous(Node):
                     self.get_logger().warn(f'Localisation incertaine (σ {self.loc_std:.2f} m) : arrêt du trajet')
                     self.cancel_goal()
                     return 'failed'
-                if not self.head_ok() and now - t0 > 2.0:
+                if not self.head_ok(persist_s=1.5) and now - t0 > 2.0:
                     self.get_logger().warn('Tête : consigne non suivie (servo ? câble ?)', throttle_duration_sec=10.0)
                 # allure : passages étroits + fatigue
                 n = self.narrow_passage()
