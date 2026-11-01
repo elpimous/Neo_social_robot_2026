@@ -109,7 +109,10 @@ class NeoAutonomous(Node):
         d('head.pan_joint', 'head_pan_joint')
         d('head.tilt_joint', 'head_tilt_joint')
         d('head.tilt_level_rad', 0.0)          # réécrit par le launch
-        d('head.pan_limit_deg', 60.0)          # ménage le câble du cou
+        d('head.pan_limit_deg', 60.0)          # butée absolue (servo ±70°, ménage le câble du cou)
+        d('head.travel_limit_deg', 45.0)       # amplitude max EN ROULANT (tête qui suit le virage)
+        d('pause.look_around', False)          # tête qui regarde autour pendant les pauses
+        d('pause.limit_deg', 45.0)             # amplitude max PENDANT LES PAUSES (si look_around)
         d('head.max_speed_deg_s', 45.0)        # lidar sur la tête : scan redressé (deskew), vitesse modérée
         d('head.rate_hz', 20.0)
         d('head.lookahead_m', 0.8)
@@ -146,6 +149,9 @@ class NeoAutonomous(Node):
         seed = int(P['random_seed'])
         self.rng = random.Random(None if seed < 0 else seed)
         self.pan_limit = math.radians(float(P['head.pan_limit_deg']))
+        self.travel_limit = min(self.pan_limit, math.radians(float(P['head.travel_limit_deg'])))
+        self.pause_limit = min(self.pan_limit, math.radians(float(P['pause.limit_deg'])))
+        self.look_around_on = bool(P['pause.look_around'])
         self.head_vmax = math.radians(float(P['head.max_speed_deg_s']))
         self.tilt = float(P['head.tilt_level_rad'])
         self.wps = self._load_waypoints(P['waypoints_file'])
@@ -219,7 +225,9 @@ class NeoAutonomous(Node):
                              'vitesse_croisiere', 'batterie_v', 'etat_batterie', 'pause_s'])
         self.get_logger().info(
             f'Néo autonome : {len(self.wps)} waypoints, pauses {P["pause.min_s"]:.0f}-{P["pause.max_s"]:.0f} s, '
-            f'pan ±{P["head.pan_limit_deg"]:.0f}° à {P["head.max_speed_deg_s"]:.0f}°/s max, '
+            f'tête ±{math.degrees(self.travel_limit):.0f}° en roulant, '
+            f'{"±%.0f° en pause" % math.degrees(self.pause_limit) if self.look_around_on else "fixe en pause"}, '
+            f'{P["head.max_speed_deg_s"]:.0f}°/s max, '
             f'vitesse {P["speed.cruise_min"]:.2f}-{P["speed.cruise_max"]:.2f} m/s — journal {self.csv_path}')
 
     # ================================================================== chargement
@@ -305,13 +313,14 @@ class NeoAutonomous(Node):
         except Exception:
             return None
 
-    def bearing_to(self, x, y):
+    def bearing_to(self, x, y, limit=None):
         """Angle (rad) du point (x, y) vu depuis le robot, limité à l'amplitude de la tête."""
         p = self.robot_pose()
         if p is None:
             return 0.0
         b = wrap(math.atan2(y - p[1], x - p[0]) - p[2])
-        return max(-self.pan_limit, min(self.pan_limit, b))
+        lim = self.pan_limit if limit is None else limit
+        return max(-lim, min(lim, b))
 
     def battery_v(self):
         return statistics.median(self.batt) if len(self.batt) >= 5 else None
@@ -389,7 +398,7 @@ class NeoAutonomous(Node):
                 tx, ty = path[i + 1]
                 break
         b = wrap(math.atan2(ty - y, tx - x) - yaw)
-        return max(-self.pan_limit, min(self.pan_limit, float(self.P['head.gain']) * b))
+        return max(-self.travel_limit, min(self.travel_limit, float(self.P['head.gain']) * b))
 
     def _head_tick(self):
         now = time.monotonic()
@@ -431,16 +440,21 @@ class NeoAutonomous(Node):
     # ================================================================== pause « regarde autour »
     def look_around(self, duration, came_from, next_wp):
         t_end = time.monotonic() + duration
+        if not self.look_around_on:                        # tête immobile, de face, pendant la pause
+            self.head_move(0.0, speed=self.head_vmax * 0.5)
+            self._sleep(max(0.0, t_end - time.monotonic()))
+            return
+        lim = self.pause_limit
         look_next = float(self.P['pause.look_next_s'])
         min_sacc = math.radians(float(self.P['pause.min_saccade_deg']))
         micro = math.radians(float(self.P['pause.micro_deg']))
         self._sleep(0.4)                                   # petit temps d'arrêt avant de regarder
         while time.monotonic() < t_end - look_next - 0.5:
             if came_from is not None and self.rng.random() < float(self.P['pause.look_back_prob']):
-                tgt = self.bearing_to(came_from['x'], came_from['y'])   # regard en arrière
+                tgt = self.bearing_to(came_from['x'], came_from['y'], lim)   # regard en arrière
             else:
                 for _ in range(10):
-                    tgt = self.rng.uniform(-self.pan_limit, self.pan_limit)
+                    tgt = self.rng.uniform(-lim, lim)
                     if abs(tgt - self.head_cmd) >= min_sacc:
                         break
             self.head_move(tgt)
@@ -448,12 +462,13 @@ class NeoAutonomous(Node):
             hold = min(hold, max(0.3, t_end - look_next - time.monotonic()))
             if self.rng.random() < 0.5 and hold > 1.0:     # petit ajustement pendant la fixation
                 self._sleep(hold * 0.55)
-                self.head_move(self.head_cmd + self.rng.uniform(-micro, micro), speed=self.head_vmax * 0.3)
+                self.head_move(max(-lim, min(lim, self.head_cmd + self.rng.uniform(-micro, micro))),
+                               speed=self.head_vmax * 0.3)
                 self._sleep(max(0.0, hold * 0.45 - 0.3))
             else:
                 self._sleep(hold)
         # anticipation : il regarde vers sa prochaine destination avant de repartir
-        self.head_move(self.bearing_to(next_wp['x'], next_wp['y']))
+        self.head_move(self.bearing_to(next_wp['x'], next_wp['y'], lim))
         self._sleep(max(0.3, t_end - time.monotonic()))
 
     # ================================================================== allure (A, B)
@@ -619,8 +634,9 @@ class NeoAutonomous(Node):
             came_from = None
             nxt = self.choose_next(here)
             # premier départ : il regarde vers sa destination
-            self.head_move(self.bearing_to(nxt['x'], nxt['y']))
-            self._sleep(0.8)
+            if self.look_around_on:
+                self.head_move(self.bearing_to(nxt['x'], nxt['y'], self.pause_limit))
+                self._sleep(0.8)
             while True:
                 dur_min = float(self.P['duration_min'])
                 if dur_min > 0 and time.monotonic() - t_start > dur_min * 60.0:
@@ -670,7 +686,8 @@ class NeoAutonomous(Node):
                     self._call(self.cli_clear_g, ClearEntireCostmap.Request(), 'clear global')
                     self._sleep(3.0)
                     nxt = self.choose_next(nxt, here)      # autre destination
-                    self.head_move(self.bearing_to(nxt['x'], nxt['y']))
+                    if self.look_around_on:
+                        self.head_move(self.bearing_to(nxt['x'], nxt['y'], self.pause_limit))
                 v = self.battery_v()
                 self.csv_w.writerow([datetime.now().strftime('%H:%M:%S'), legs, lap, src, target['name'],
                                      res, f'{dur:.1f}',
@@ -704,7 +721,8 @@ class NeoAutonomous(Node):
         rest = next((w for w in self.wps if w['name'] == name), self.wps[0])
         if here is not rest:
             self.get_logger().warn(f'Retour au point de repos {rest["name"]}')
-            self.head_move(self.bearing_to(rest['x'], rest['y']))
+            if self.look_around_on:
+                self.head_move(self.bearing_to(rest['x'], rest['y'], self.pause_limit))
             self.navigate(rest, float(self.P['speed.absolute_min']))
         self.head_move(0.0)
         return f'batterie faible ({self.battery_v() or 0:.2f} V) : Néo au repos à {rest["name"]}'

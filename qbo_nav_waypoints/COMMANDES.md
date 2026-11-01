@@ -141,6 +141,16 @@ ros2 launch qbo_nav_waypoints neo_autonomous.launch.py
 
 Options : `duration_min:=60` (0 = illimité), `waypoints:=$HOME/neo_waypoints.yaml`, `tilt_level_rad:=0.0123`.
 
+Tête (par défaut : ±45° en roulant, **fixe pendant les pauses**) :
+
+| Option | Effet |
+|---|---|
+| `head_travel_deg:=30.0` | amplitude max de la tête en roulant |
+| `look_around:=true` | la tête regarde autour pendant les pauses |
+| `head_pause_deg:=35.0` | amplitude max pendant les pauses (avec `look_around:=true`) |
+
+Valeurs par défaut modifiables aussi dans `config/autonomous_params.yaml`.
+
 **Terminal 4** : RViz → 2D Pose Estimate → fermer RViz. Néo regarde vers sa destination puis part.
 
 Journal des trajets : `~/.ros/qbo_nav_test/autonome_*.csv`. Arrêt : `Ctrl+C` (tête recentrée, lidar arrêté).

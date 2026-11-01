@@ -10,6 +10,8 @@ neo_autonomous:
 
     # ---------- Pause : « regarde autour de lui » ----------
     pause:
+      look_around: false                 # true : la tête regarde autour pendant les pauses ; false : fixe, de face
+      limit_deg: 45.0                    # amplitude max de la tête pendant les pauses (si look_around: true)
       min_s: 5.0
       max_s: 10.0
       look_back_prob: 0.2                # probabilité d'un regard vers d'où il vient
@@ -21,7 +23,8 @@ neo_autonomous:
 
     # ---------- Tête (pan seulement, tilt fixe à l'horizontale) ----------
     head:
-      pan_limit_deg: 60.0                # ménage le câble du cou (servo : ±70°)
+      pan_limit_deg: 60.0                # butée absolue, jamais dépassée (servo : ±70°, câble du cou)
+      travel_limit_deg: 45.0             # amplitude max EN ROULANT (tête qui suit le virage)
       max_speed_deg_s: 45.0              # lidar sur la tête (scan redressé par scan_range_filter)
       lookahead_m: 0.8                   # point du chemin regardé en roulant
       gain: 1.0                          # pan = gain x angle du virage (1.0 = regarde exactement le point)

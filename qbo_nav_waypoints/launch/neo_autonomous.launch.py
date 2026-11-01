@@ -11,6 +11,7 @@ waypoints, et ajoute le nœud neo_autonomous qui pilote la navigation ET la têt
 
   ros2 launch qbo_nav_waypoints neo_autonomous.launch.py
   ros2 launch qbo_nav_waypoints neo_autonomous.launch.py duration_min:=60 waypoints:=$HOME/neo_waypoints.yaml
+  ros2 launch qbo_nav_waypoints neo_autonomous.launch.py head_travel_deg:=30.0 look_around:=true head_pause_deg:=35.0
 
 Prérequis : qbo_startup lancé (base + tête), puis « 2D Pose Estimate » dans RViz.
 """
@@ -32,6 +33,9 @@ def generate_launch_description():
     tilt_level = LaunchConfiguration('tilt_level_rad')
     duration = LaunchConfiguration('duration_min')
     params = LaunchConfiguration('autonomous_params')
+    travel_limit = LaunchConfiguration('head_travel_deg')
+    look_around = LaunchConfiguration('look_around')
+    pause_limit = LaunchConfiguration('head_pause_deg')
 
     stack = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(pkg, 'launch', 'test_moving_laser_on_waypoints.launch.py')),
@@ -45,6 +49,9 @@ def generate_launch_description():
             'waypoints_file': waypoints,
             'duration_min': ParameterValue(duration, value_type=float),
             'head.tilt_level_rad': ParameterValue(tilt_level, value_type=float),
+            'head.travel_limit_deg': ParameterValue(travel_limit, value_type=float),
+            'pause.look_around': ParameterValue(look_around, value_type=bool),
+            'pause.limit_deg': ParameterValue(pause_limit, value_type=float),
         }])
 
     return LaunchDescription([
@@ -52,6 +59,12 @@ def generate_launch_description():
         DeclareLaunchArgument('tilt_level_rad', default_value='0.0',
                               description='Tilt qui met le laser horizontal (calibrate_head_level)'),
         DeclareLaunchArgument('duration_min', default_value='0.0', description='0 = illimité'),
+        DeclareLaunchArgument('head_travel_deg', default_value='45.0',
+                              description='Amplitude max de la tête en roulant (°)'),
+        DeclareLaunchArgument('look_around', default_value='false',
+                              description='true : la tête regarde autour pendant les pauses'),
+        DeclareLaunchArgument('head_pause_deg', default_value='45.0',
+                              description='Amplitude max de la tête pendant les pauses (°)'),
         DeclareLaunchArgument('autonomous_params',
                               default_value=os.path.join(pkg, 'config', 'autonomous_params.yaml')),
         stack,
