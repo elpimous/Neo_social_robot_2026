@@ -128,8 +128,8 @@ class NeoAutonomous(Node):
         d('speed.scan_topic', '/scan_filtered')
         # ---- batterie (B) — LiFePO4 4S, tensions EN ROULAGE, à affiner avec le test d'autonomie
         d('battery.enabled', True)
-        d('battery.tired_v', 12.7)
-        d('battery.low_v', 12.2)
+        d('battery.tired_v', 12.8)
+        d('battery.low_v', 12.5)
         d('battery.tired_speed_factor', 0.85)
         d('battery.tired_pause_factor', 1.6)
         d('battery.rest_waypoint', '')         # '' = premier waypoint du fichier

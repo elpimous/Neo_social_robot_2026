@@ -41,8 +41,8 @@ neo_autonomous:
     # >>> À AFFINER avec la courbe du test d'autonomie
     battery:
       enabled: true
-      tired_v: 12.7                      # en dessous : plus lent, pauses plus longues
-      low_v: 12.2                        # en dessous : retour au point de repos et arrêt
+      tired_v: 12.8                      # en dessous : plus lent, pauses plus longues
+      low_v: 12.5                        # en dessous : retour au repos et arrêt (01/11 : Néo s'est éteint à 12.3 V)
       tired_speed_factor: 0.85
       tired_pause_factor: 1.6
       rest_waypoint: ""                  # "" = premier waypoint du fichier
