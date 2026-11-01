@@ -41,6 +41,7 @@ setup(
             'neo_dashboard = qbo_nav_waypoints.neo_dashboard:main',
             'neo_autonomous = qbo_nav_waypoints.neo_autonomous:main',
             'head_sweep = qbo_nav_waypoints.head_sweep:main',
+            'power_profile = qbo_nav_waypoints.power_profile:main',
         ],
     },
 )
