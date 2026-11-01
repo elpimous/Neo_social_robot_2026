@@ -32,12 +32,17 @@ def main(args=None):
     period = 4.0 * amp / spd                      # aller-retour complet
     n.get_logger().info(f'Balayage ±{math.degrees(amp):.0f}° à {math.degrees(spd):.0f}°/s pendant {dur:.0f} s')
 
-    def send(p):
+    last = {'p': None}
+
+    def send(p, dt=0.05):
+        # vitesse = écart / période : le servo enchaîne les consignes sans s'arrêter (pas d'à-coups)
+        v = spd * 1.3 if last['p'] is None else max(0.05, abs(p - last['p']) / dt * 1.15)
+        last['p'] = p
         m = JointState()
         m.header.stamp = n.get_clock().now().to_msg()
         m.name = ['head_pan_joint', 'head_tilt_joint']
         m.position = [p, tilt]
-        m.velocity = [spd * 1.3, spd * 1.3]
+        m.velocity = [v, 0.3]
         pub.publish(m)
 
     t0 = time.monotonic()

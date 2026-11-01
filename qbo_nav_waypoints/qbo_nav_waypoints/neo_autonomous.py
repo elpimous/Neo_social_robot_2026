@@ -334,11 +334,15 @@ class NeoAutonomous(Node):
 
     # ================================================================== tête
     def _publish_head(self, pan, vel):
+        """vel = vitesse du servo pour CETTE consigne. En flux à 20 Hz, elle vaut l'écart / période :
+        le servo arrive pile à la consigne suivante => mouvement continu, sans à-coups.
+        (Jamais 0 : pour un AX-12, Moving_Speed = 0 signifie vitesse MAXIMALE.)"""
+        vel = max(0.05, min(float(vel), self.head_vmax * 1.5))
         m = JointState()
         m.header.stamp = self.get_clock().now().to_msg()
         m.name = [self.P['head.pan_joint'], self.P['head.tilt_joint']]
         m.position = [float(pan), float(self.tilt)]
-        m.velocity = [float(vel), float(vel)]
+        m.velocity = [vel, 0.3]
         self.pub_head.publish(m)
         self.head_cmd = pan
         self.head_pub_t = time.monotonic()
@@ -406,8 +410,10 @@ class NeoAutonomous(Node):
             else:
                 pan = self.head_hold_pos
         moving = abs(pan - cmd) > math.radians(0.2)
-        if moving or now - self.head_pub_t > 1.0:      # au repos : 1 consigne/s (évite l'auto torque off)
-            self._publish_head(pan, self.head_vmax * 1.3)
+        if moving:
+            self._publish_head(pan, abs(pan - cmd) / dt * 1.15)   # vitesse ajustée : servo en mouvement continu
+        elif now - self.head_pub_t > 1.0:              # au repos : 1 consigne/s (évite l'auto torque off)
+            self._publish_head(pan, 0.3)
 
     def head_ok(self, persist_s=0.0):
         """Vrai si la tête suit sa consigne. persist_s > 0 : faux seulement si l'écart dure."""
