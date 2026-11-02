@@ -288,6 +288,8 @@ def find_blockages(rows, window_s=8.0, min_move_m=0.15):
         slow = sum(1 for r in seg if r['ralenti']) / len(seg)
         stop = sum(1 for r in seg if r['stop']) / len(seg)
         man = sorted({r['manoeuvre'] for r in seg if r['manoeuvre']})
+        if st['w_reel'] >= 0.3 and (b - a) <= 15.0 and not man and (slow + stop) < 0.2:
+            continue                                       # pivot sur place franc = manœuvre normale, pas un blocage
         cmd_n = st['v_nav'] + 0.3 * st['w_nav']
         cmd_b = st['v_base'] + 0.3 * st['w_base']
         real = st['v_reel'] + 0.3 * st['w_reel']
