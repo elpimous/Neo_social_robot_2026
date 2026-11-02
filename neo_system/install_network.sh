@@ -31,7 +31,7 @@ if [ -n "$DRV" ]; then
 fi
 
 echo "1c   Bande 2.4 GHz imposée + IP fixe (le Wi-Fi était repassé en 5 GHz canal 60 DFS)"
-nmcli connection modify "$CON" 802-11-wireless.band bg 802-11-wireless.channel 0 \
+nmcli connection modify "$CON" 802-11-wireless.band bg \
       ipv4.method manual ipv4.addresses 192.168.1.23/24 ipv4.gateway 192.168.1.254 \
       ipv4.dns 192.168.1.254 ipv6.method ignore
 # Le pilote Realtek roame tout seul vers la radio 5 GHz de la box (même nom de réseau)
