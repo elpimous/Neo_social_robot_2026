@@ -205,7 +205,12 @@ controller_server:
       use_rotate_to_heading: true
       rotate_to_heading_min_angle: 1.05
       rotate_to_heading_angular_vel: 0.5
-      max_angular_accel: 1.0
+      # IMPORTANT : RPP limite la rotation sur place à (vitesse MESURÉE + accel x 0.05 s).
+      # Avec 1.0, robot à l'arrêt => consigne 0.05-0.07 rad/s, dans la zone morte des
+      # moteurs => Néo ne démarre jamais vraiment (10° en 30 s, enregistrement du
+      # 02/11/2026). Valeur haute = limite neutralisée ; la rampe est faite par le
+      # velocity_smoother (boucle ouverte, 1.2 rad/s²), qui ne tombe pas dans ce piège.
+      max_angular_accel: 10.0
       allow_reversing: false
       max_robot_pose_search_dist: 10.0
 
