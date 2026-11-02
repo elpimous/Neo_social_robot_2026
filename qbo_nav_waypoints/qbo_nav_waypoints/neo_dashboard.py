@@ -890,7 +890,7 @@ transition:width .8s}
 .glab{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--dim);margin-top:4px}
 canvas{width:100%;display:block}
 .chart{height:230px}.mapc{height:520px}
-.cam{position:relative;background:#05070a;border:1px solid var(--line);border-radius:8px;overflow:hidden;aspect-ratio:4/3}
+.cam{position:relative;background:#05070a;border:1px solid var(--line);border-radius:8px;overflow:hidden;aspect-ratio:4/3;width:50%;margin:0 auto}
 .cam img{width:100%;height:100%;object-fit:contain;display:block}
 .cam .none{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:12px var(--mono);color:var(--dim)}
 .cam .rec{position:absolute;top:10px;left:38px;font:600 11px var(--mono);color:var(--bad);letter-spacing:.1em}
