@@ -1,0 +1,15 @@
+# Auteur : Vincent FOUCAULT — gardien du Wi-Fi de Néo
+[Unit]
+Description=Neo - gardien Wi-Fi (surveillance + reparation automatique)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/neo_netguard.sh
+Restart=always
+RestartSec=5
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target
