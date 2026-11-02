@@ -857,13 +857,13 @@ PAGE = r"""<!doctype html>
 --ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--blue:#60a5fa;--mag:#e879f9;
 --mono:ui-monospace,"JetBrains Mono","Fira Code",Menlo,Consolas,monospace}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--txt);
-font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+font:12px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 body{background-image:radial-gradient(circle at 20% -10%,#0f2a33 0,transparent 45%),
 linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
 background-size:auto,40px 40px,40px 40px;background-attachment:fixed}
-header{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--line);
+header{display:flex;align-items:center;gap:12px;padding:6px 14px;border-bottom:1px solid var(--line);
 background:rgba(7,9,13,.85);backdrop-filter:blur(6px);position:sticky;top:0;z-index:5;flex-wrap:wrap}
-.logo{font:700 18px var(--mono);letter-spacing:.18em;color:var(--acc)}
+.logo{font:700 15px var(--mono);letter-spacing:.18em;color:var(--acc)}
 .logo small{color:var(--dim);font-weight:400;letter-spacing:.1em;margin-left:8px}
 .pill{font:600 12px var(--mono);padding:4px 10px;border-radius:99px;border:1px solid currentColor;letter-spacing:.08em}
 .pill.live{color:var(--ok)}.pill.live::before{content:"● ";animation:blink 1.2s infinite}
@@ -872,25 +872,25 @@ background:rgba(7,9,13,.85);backdrop-filter:blur(6px);position:sticky;top:0;z-in
 .hstat{font:13px var(--mono);color:var(--dim)}.hstat b{color:var(--txt);font-weight:600}
 .sp{flex:1}a.btn{font:12px var(--mono);color:var(--acc);text-decoration:none;border:1px solid var(--line);
 padding:5px 10px;border-radius:6px}a.btn:hover{border-color:var(--acc)}
-main{display:grid;gap:14px;padding:14px 20px 30px;grid-template-columns:repeat(12,1fr)}
+main{display:grid;gap:8px;padding:8px 12px 12px;grid-template-columns:repeat(12,1fr)}
 .card{background:linear-gradient(180deg,rgba(255,255,255,.02),transparent),var(--panel);
-border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0;position:relative}
-.card h2{margin:0 0 10px;font:600 11px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0;position:relative}
+.card h2{margin:0 0 6px;font:600 11px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
 .c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}
 .c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
 @media(max-width:1100px){.c3,.c4,.c5,.c6,.c7,.c8{grid-column:span 12}}
-.big{font:700 54px/1 var(--mono);letter-spacing:-.02em}.big small{font-size:20px;color:var(--dim);margin-left:4px}
-.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font:13px var(--mono);margin-top:10px}
+.big{font:700 36px/1 var(--mono);letter-spacing:-.02em}.big small{font-size:15px;color:var(--dim);margin-left:4px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font:11px var(--mono);margin-top:6px}
 .kv span:nth-child(odd){color:var(--dim)}.kv span:nth-child(even){text-align:right}
-.gauge{height:18px;border-radius:4px;background:#0a0f16;border:1px solid var(--line);margin-top:14px;
+.gauge{height:12px;border-radius:4px;background:#0a0f16;border:1px solid var(--line);margin-top:14px;
 position:relative;overflow:hidden}
 .gauge i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--bad),var(--warn) 30%,var(--ok));
 transition:width .8s}
 .gauge b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--txt);opacity:.6}
 .glab{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--dim);margin-top:4px}
 canvas{width:100%;display:block}
-.chart{height:230px}.mapc{height:520px}
-.cam{position:relative;background:#05070a;border:1px solid var(--line);border-radius:8px;overflow:hidden;aspect-ratio:4/3;width:50%;margin:0 auto}
+.chart{height:130px}.mapc{height:290px}
+.cam{position:relative;background:#05070a;border:1px solid var(--line);border-radius:8px;overflow:hidden;aspect-ratio:4/3;width:25%;margin:0 auto}
 .cam img{width:100%;height:100%;object-fit:contain;display:block}
 .cam .none{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:12px var(--mono);color:var(--dim)}
 .cam .rec{position:absolute;top:10px;left:38px;font:600 11px var(--mono);color:var(--bad);letter-spacing:.1em}
@@ -899,20 +899,20 @@ canvas{width:100%;display:block}
 .cam::after{content:"";position:absolute;inset:0;pointer-events:none;
 background:linear-gradient(var(--acc),var(--acc)) left 12px top 12px/18px 2px no-repeat,linear-gradient(var(--acc),var(--acc)) left 12px top 12px/2px 18px no-repeat,
 linear-gradient(var(--acc),var(--acc)) right 12px bottom 12px/18px 2px no-repeat,linear-gradient(var(--acc),var(--acc)) right 12px bottom 12px/2px 18px no-repeat;opacity:.7}
-.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-.tile{background:#0a0f16;border:1px solid var(--line);border-radius:8px;padding:10px 12px}
-.tile .l{font:11px var(--mono);color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
-.tile .v{font:700 26px/1.2 var(--mono)}.tile .v small{font-size:13px;color:var(--dim);font-weight:400}
-.cores{display:flex;gap:4px;align-items:flex-end;height:70px;margin-top:6px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.tile{background:#0a0f16;border:1px solid var(--line);border-radius:6px;padding:5px 7px}
+.tile .l{font:10px var(--mono);color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+.tile .v{font:700 17px/1.2 var(--mono)}.tile .v small{font-size:11px;color:var(--dim);font-weight:400}
+.cores{display:flex;gap:4px;align-items:flex-end;height:45px;margin-top:4px}
 .cores div{flex:1;background:#0a0f16;border:1px solid var(--line);border-radius:3px;position:relative;height:100%}
 .cores div i{position:absolute;left:0;right:0;bottom:0;background:var(--acc);opacity:.85;transition:height .6s}
 .cores div span{position:absolute;bottom:-16px;left:0;right:0;text-align:center;font:10px var(--mono);color:var(--dim)}
-.bars{display:grid;gap:8px;margin-top:22px}
+.bars{display:grid;gap:5px;margin-top:18px}
 .bar{display:grid;grid-template-columns:90px 1fr 70px;gap:8px;align-items:center;font:12px var(--mono)}
 .bar>div{height:8px;background:#0a0f16;border:1px solid var(--line);border-radius:4px;overflow:hidden}
 .bar>div i{display:block;height:100%;background:var(--blue);transition:width .6s}
 .bar span:last-child{text-align:right}
-#ev{font:12px/1.55 var(--mono);max-height:260px;overflow:auto}
+#ev{font:11px/1.45 var(--mono);max-height:110px;overflow:auto}
 #ev div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-bottom:1px dashed #141c27;padding:2px 0}
 #ev .t{color:var(--dim)}#ev .WARN{color:var(--warn)}#ev .ERROR,#ev .FATAL{color:var(--bad)}#ev .ok{color:var(--ok)}
 .ovl{position:absolute;top:12px;right:16px;font:11px var(--mono);color:var(--dim);text-align:right}
@@ -932,7 +932,7 @@ font:600 14px var(--mono);box-shadow:0 0 40px rgba(248,113,113,.25)}
   <a class="btn" href="/api/csv">⇩ CSV</a>
 </header>
 <main>
-  <section class="card c4">
+  <section class="card c3">
     <h2>Batterie</h2>
     <div class="big" id="bv">–<small>V</small></div>
     <div class="gauge"><i id="gfill" style="width:0"></i><b id="gknee"></b></div>
@@ -947,13 +947,24 @@ font:600 14px var(--mono);box-shadow:0 0 40px rgba(248,113,113,.25)}
       <span>énergie Jetson</span><span id="ewh">–</span>
     </div>
   </section>
-  <section class="card c8">
+  <section class="card c5">
     <h2>Courbe de décharge</h2>
     <div class="ovl" id="chov"></div>
     <canvas id="cbat" class="chart"></canvas>
     <div class="legend"><span><i style="background:var(--warn)"></i>tension filtrée (médiane 30 s)</span>
     <span><i style="background:#4b5a6d"></i>brute</span><span><i style="background:var(--bad)"></i>coupure</span>
     <span><i style="background:var(--mag)"></i>coude 3.0 V/cellule</span></div>
+  </section>
+  <section class="card c4">
+    <h2>Jetson Orin NX · CPU par cœur</h2>
+    <div class="ovl" id="sysov"></div>
+    <div class="cores" id="cores"></div>
+    <div class="bars">
+      <div class="bar"><span>GPU</span><div><i id="bgpu"></i></div><span id="tgpu">–</span></div>
+      <div class="bar"><span>RAM</span><div><i id="bram"></i></div><span id="tram">–</span></div>
+      <div class="bar"><span>Wi-Fi</span><div><i id="bwifi"></i></div><span id="twifi">–</span></div>
+    </div>
+    <div class="kv" id="sysk"></div>
   </section>
 
   <section class="card c4">
@@ -983,27 +994,16 @@ font:600 14px var(--mono);box-shadow:0 0 40px rgba(248,113,113,.25)}
       <div class="tile"><div class="l">localisation σ</div><div class="v" id="mloc">–<small> cm</small></div></div>
       <div class="tile"><div class="l">lidar</div><div class="v" id="mscan">–<small> Hz</small></div></div>
     </div>
-    <canvas id="cspd" style="height:120px;margin-top:12px"></canvas>
+    <canvas id="cspd" style="height:80px;margin-top:6px"></canvas>
   </section>
 
-  <section class="card c4">
-    <h2>Jetson Orin NX · CPU par cœur</h2>
-    <div class="ovl" id="sysov"></div>
-    <div class="cores" id="cores"></div>
-    <div class="bars">
-      <div class="bar"><span>GPU</span><div><i id="bgpu"></i></div><span id="tgpu">–</span></div>
-      <div class="bar"><span>RAM</span><div><i id="bram"></i></div><span id="tram">–</span></div>
-      <div class="bar"><span>Wi-Fi</span><div><i id="bwifi"></i></div><span id="twifi">–</span></div>
-    </div>
-    <div class="kv" id="sysk"></div>
-  </section>
-  <section class="card c4">
+  <section class="card c6">
     <h2>Puissance &amp; températures</h2>
-    <canvas id="cpow" class="chart"></canvas>
+    <canvas id="cpow" class="chart" style="height:100px"></canvas>
     <div class="legend"><span><i style="background:var(--blue)"></i>puissance module (W)</span>
     <span><i style="background:var(--bad)"></i>température max (°C)</span></div>
   </section>
-  <section class="card c4">
+  <section class="card c6">
     <h2>Journal</h2>
     <div id="ev"></div>
   </section>
