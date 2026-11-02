@@ -42,6 +42,8 @@ setup(
             'neo_autonomous = qbo_nav_waypoints.neo_autonomous:main',
             'head_sweep = qbo_nav_waypoints.head_sweep:main',
             'power_profile = qbo_nav_waypoints.power_profile:main',
+            'nav_recorder = qbo_nav_waypoints.nav_recorder:main',
+            'nav_report = qbo_nav_waypoints.nav_recorder:report_main',
         ],
     },
 )

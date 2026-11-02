@@ -21,6 +21,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -36,6 +37,7 @@ def generate_launch_description():
     travel_limit = LaunchConfiguration('head_travel_deg')
     look_around = LaunchConfiguration('look_around')
     pause_limit = LaunchConfiguration('head_pause_deg')
+    record = LaunchConfiguration('record')
 
     stack = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(pkg, 'launch', 'test_moving_laser_on_waypoints.launch.py')),
@@ -54,6 +56,11 @@ def generate_launch_description():
             'pause.limit_deg': ParameterValue(pause_limit, value_type=float),
         }])
 
+    # Enregistreur de vol : tout est enregistré (10 Hz) + analyse des blocages au Ctrl+C
+    recorder = Node(
+        package='qbo_nav_waypoints', executable='nav_recorder', name='nav_recorder',
+        output='screen', sigterm_timeout='60', condition=IfCondition(record))
+
     return LaunchDescription([
         DeclareLaunchArgument('waypoints', default_value=os.path.join(pkg, 'config', 'waypoints.yaml')),
         DeclareLaunchArgument('tilt_level_rad', default_value='0.0',
@@ -61,7 +68,9 @@ def generate_launch_description():
         DeclareLaunchArgument('duration_min', default_value='0.0', description='0 = illimité'),
         DeclareLaunchArgument('head_travel_deg', default_value='45.0',
                               description='Amplitude max de la tête en roulant (°)'),
-        DeclareLaunchArgument('look_around', default_value='false',
+        DeclareLaunchArgument('record', default_value='true',
+                              description='Enregistre toute la navigation (navrec_*.csv + rapport des blocages)'),
+        DeclareLaunchArgument('look_around', default_value='true',
                               description='true : la tête regarde autour pendant les pauses'),
         DeclareLaunchArgument('head_pause_deg', default_value='45.0',
                               description='Amplitude max de la tête pendant les pauses (°)'),
@@ -69,4 +78,5 @@ def generate_launch_description():
                               default_value=os.path.join(pkg, 'config', 'autonomous_params.yaml')),
         stack,
         autonomous,
+        recorder,
     ])

@@ -95,14 +95,14 @@ class NeoAutonomous(Node):
         d('max_consecutive_failures', 4)
         d('initial_pose_timeout_s', 900.0)
         # ---- pauses (3)
-        d('pause.min_s', 5.0)
-        d('pause.max_s', 10.0)
+        d('pause.min_s', 3.0)
+        d('pause.max_s', 5.0)
         d('pause.look_back_prob', 0.2)
         d('pause.fix_min_s', 0.6)
         d('pause.fix_max_s', 2.0)
         d('pause.min_saccade_deg', 15.0)
         d('pause.micro_deg', 2.5)
-        d('pause.look_next_s', 1.5)            # regard vers la prochaine destination avant de repartir
+        d('pause.look_next_s', 1.0)            # regard vers la prochaine destination avant de repartir
         # ---- tête (2, 4)
         d('head.command_topic', '/cmd_joints')
         d('head.joint_states_topic', '/joint_states')
@@ -111,7 +111,7 @@ class NeoAutonomous(Node):
         d('head.tilt_level_rad', 0.0)          # réécrit par le launch
         d('head.pan_limit_deg', 60.0)          # butée absolue (servo ±70°, ménage le câble du cou)
         d('head.travel_limit_deg', 45.0)       # amplitude max EN ROULANT (tête qui suit le virage)
-        d('pause.look_around', False)          # tête qui regarde autour pendant les pauses
+        d('pause.look_around', True)           # tête qui regarde autour pendant les pauses
         d('pause.limit_deg', 45.0)             # amplitude max PENDANT LES PAUSES (si look_around)
         d('head.max_speed_deg_s', 45.0)        # lidar sur la tête : scan redressé (deskew), vitesse modérée
         d('head.rate_hz', 20.0)
@@ -131,8 +131,8 @@ class NeoAutonomous(Node):
         d('speed.scan_topic', '/scan_filtered')
         # ---- batterie (B) — LiFePO4 4S, tensions EN ROULAGE, à affiner avec le test d'autonomie
         d('battery.enabled', True)
-        d('battery.tired_v', 12.8)
-        d('battery.low_v', 12.5)
+        d('battery.tired_v', 11.5)
+        d('battery.low_v', 11.0)
         d('battery.tired_speed_factor', 0.85)
         d('battery.tired_pause_factor', 1.6)
         d('battery.rest_waypoint', '')         # '' = premier waypoint du fichier
