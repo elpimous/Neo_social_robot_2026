@@ -21,7 +21,7 @@ echo "1b   Pilote Realtek : économie d'énergie coupée au niveau du pilote"
 DRV=$(basename "$(readlink /sys/class/net/$(nmcli -t -f DEVICE,TYPE device | awk -F: '$2=="wifi"{print $1; exit}')/device/driver/module 2>/dev/null)")
 if [ -n "$DRV" ]; then
   OPTS=""
-  for p in rtw_power_mgnt=0 rtw_ips_mode=0 rtw_lps_level=0; do
+  for p in rtw_power_mgnt=0 rtw_ips_mode=0 rtw_lps_level=0 rtw_max_roaming_times=0; do
     modinfo "$DRV" 2>/dev/null | grep -q "parm: *${p%%=*}:" && OPTS="$OPTS $p"
   done
   if [ -n "$OPTS" ]; then
@@ -34,6 +34,16 @@ echo "1c   Bande 2.4 GHz imposée + IP fixe (le Wi-Fi était repassé en 5 GHz c
 nmcli connection modify "$CON" 802-11-wireless.band bg 802-11-wireless.channel 0 \
       ipv4.method manual ipv4.addresses 192.168.1.23/24 ipv4.gateway 192.168.1.254 \
       ipv4.dns 192.168.1.254 ipv6.method ignore
+# Le pilote Realtek roame tout seul vers la radio 5 GHz de la box (même nom de réseau)
+# malgré "bg" : on verrouille sur l'adresse (BSSID) de la radio 2.4 GHz.
+BSSID=$(nmcli -t -f SIGNAL,BSSID,FREQ,SSID device wifi list --rescan yes 2>/dev/null | sed 's/\\:/-/g' \
+        | awk -F: -v s="$CON" '$4==s && $3+0<3000 {print $1":"$2}' | sort -t: -k1 -nr | head -1 | cut -d: -f2 | tr '-' ':')
+if [ -n "$BSSID" ]; then
+  nmcli connection modify "$CON" 802-11-wireless.bssid "$BSSID"
+  echo "     verrouillé sur la radio 2.4 GHz de la box : $BSSID"
+else
+  echo "     ATTENTION : radio 2.4 GHz de $CON introuvable au scan — BSSID non verrouillé"
+fi
 # aucun autre profil Wi-Fi ne doit pouvoir passer devant
 for c in $(nmcli -t -f NAME,TYPE connection show | awk -F: '$2=="802-11-wireless"{print $1}'); do
   [ "$c" != "$CON" ] && nmcli connection modify "$c" connection.autoconnect no && echo "     profil '$c' : autoconnect désactivé"
