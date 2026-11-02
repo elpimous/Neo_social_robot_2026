@@ -201,6 +201,7 @@ class NeoAutonomous(Node):
         self.create_subscription(PoseWithCovarianceStamped, '/initialpose', self._initpose_cb, 10,
                                  callback_group=self.cbg)
         self.create_subscription(DiagnosticArray, '/diagnostics', self._diag_cb, 10, callback_group=self.cbg)
+        self.pub_initpose = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
 
         self.nav = ActionClient(self, NavigateToPose, 'navigate_to_pose', callback_group=self.cbg)
         self.cli_param = self.create_client(SetParameters, P['speed.controller_node'] + '/set_parameters',
@@ -235,6 +236,11 @@ class NeoAutonomous(Node):
         with open(os.path.expanduser(path), 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f) or {}
         self.map_frame = data.get('frame_id', self.P['map_frame'])
+        ip = data.get('initial_pose', {}) or {}
+        self.init_pose = None
+        if ip.get('enabled', False):
+            self.init_pose = (float(ip.get('x', 0.0)), float(ip.get('y', 0.0)),
+                              math.radians(float(ip.get('yaw_deg', 0.0))))
         return [{'name': str(w.get('name', f'WP{i + 1}')), 'x': float(w['x']), 'y': float(w['y']),
                  'last': -1e9, 'visits': 0}
                 for i, w in enumerate(data.get('waypoints', []) or [])]
@@ -609,16 +615,44 @@ class NeoAutonomous(Node):
             if time.monotonic() - t0 > 15.0:
                 raise RuntimeError('lidar : aucun scan')
             self._sleep(0.2)
-        log.warn('>>> Place Néo dans RViz avec "2D Pose Estimate" (le scan rouge doit coller aux murs)')
-        n0, t0 = self.user_initpose, time.monotonic()
-        while self.user_initpose == n0:
-            if time.monotonic() - t0 > float(self.P['initial_pose_timeout_s']):
-                raise RuntimeError('pas de 2D Pose Estimate')
-            self._sleep(0.2)
+        if self.init_pose is not None:
+            self._send_initial_pose(*self.init_pose)
+        else:
+            log.warn('>>> Place Néo dans RViz avec "2D Pose Estimate" (le scan rouge doit coller aux murs)')
+            n0, t0 = self.user_initpose, time.monotonic()
+            while self.user_initpose == n0:
+                if time.monotonic() - t0 > float(self.P['initial_pose_timeout_s']):
+                    raise RuntimeError('pas de 2D Pose Estimate')
+                self._sleep(0.2)
         self._sleep(2.0)
         self._call(self.cli_clear_l, ClearEntireCostmap.Request(), 'clear local')
         self._call(self.cli_clear_g, ClearEntireCostmap.Request(), 'clear global')
         log.info('Localisé : Néo part se promener')
+
+    def _send_initial_pose(self, x, y, yaw):
+        """Pose de départ du fichier waypoints -> AMCL (/initialpose), sans passer par RViz."""
+        log = self.get_logger()
+        msg = PoseWithCovarianceStamped()
+        msg.header.frame_id = self.map_frame
+        msg.pose.pose.position.x = x
+        msg.pose.pose.position.y = y
+        msg.pose.pose.orientation.z = math.sin(yaw / 2.0)
+        msg.pose.pose.orientation.w = math.cos(yaw / 2.0)
+        cov = [0.0] * 36
+        cov[0] = cov[7] = 0.25 ** 2      # ±25 cm
+        cov[35] = math.radians(8.0) ** 2  # ±8°
+        msg.pose.covariance = cov
+        n0 = self.user_initpose
+        t0 = time.monotonic()
+        # AMCL peut ne pas être encore abonné : on republie jusqu'à ce qu'il réponde
+        while time.monotonic() - t0 < 20.0:
+            msg.header.stamp = self.get_clock().now().to_msg()
+            self.pub_initpose.publish(msg)
+            self._sleep(1.0)
+            if self.user_initpose > n0 and time.monotonic() - self.amcl_t < 1.5:
+                break
+        log.info(f'Pose de départ envoyée à AMCL : x={x:.2f} y={y:.2f} '
+                 f'cap={math.degrees(yaw):+.1f}° (2D Pose Estimate possible pour corriger)')
 
     # ================================================================== boucle principale
     def run(self):
