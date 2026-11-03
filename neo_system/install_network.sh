@@ -21,7 +21,7 @@ echo "1b   Pilote Realtek : économie d'énergie coupée au niveau du pilote"
 DRV=$(basename "$(readlink /sys/class/net/$(nmcli -t -f DEVICE,TYPE device | awk -F: '$2=="wifi"{print $1; exit}')/device/driver/module 2>/dev/null)")
 if [ -n "$DRV" ]; then
   OPTS=""
-  for p in rtw_power_mgnt=0 rtw_ips_mode=0 rtw_lps_level=0 rtw_max_roaming_times=0; do
+  for p in rtw_power_mgnt=0 rtw_ips_mode=0 rtw_lps_level=0 rtw_max_roaming_times=0 rtw_tx_pwr_lmt_enable=0 rtw_country_code=FR; do
     modinfo "$DRV" 2>/dev/null | grep -q "parm: *${p%%=*}:" && OPTS="$OPTS $p"
   done
   if [ -n "$OPTS" ]; then
