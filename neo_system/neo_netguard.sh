@@ -45,6 +45,8 @@ DEV=$(wifi_dev)
 log "=== démarrage du gardien (interface ${DEV:-?}, connexion $CON, box $GW) ==="
 # Économie d'énergie Wi-Fi : première cause de décrochages sur Jetson
 [ -n "$DEV" ] && iw dev "$DEV" set power_save off 2>/dev/null
+# Puissance d'émission : 20 dBm = limite légale 2.4 GHz en France (le pilote donne 19)
+[ -n "$DEV" ] && iw dev "$DEV" set txpower fixed 2000 2>/dev/null
 
 while true; do
   rotate
@@ -76,6 +78,7 @@ while true; do
             modprobe -r "$DRV" >> "$LOG" 2>&1; sleep 3; modprobe "$DRV" >> "$LOG" 2>&1
             sleep 10; DEV=$(wifi_dev)
             [ -n "$DEV" ] && iw dev "$DEV" set power_save off 2>/dev/null
+            [ -n "$DEV" ] && iw dev "$DEV" set txpower fixed 2000 2>/dev/null
             nmcli connection up "$CON" >> "$LOG" 2>&1
           else
             log "réparation 3 : pilote introuvable"
